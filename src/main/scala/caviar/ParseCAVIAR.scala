@@ -1,38 +1,16 @@
-/*
- * Copyright (C) 2016  Nikos Katzouris
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+package caviar
 
-package oled.datahandling
-
+import oled.logic.parsers.ClausalLogicParser
 import java.io.File
-
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoClient
 import com.mongodb.casbah.commons.MongoDBObject
 import oled.logic.Literal
-import oled.logic.parsers.ClausalLogicParser
-
 import scala.collection.immutable.SortedMap
 
 /**
-  * Created by nkatz on 3/13/17.
-  *
-  * Parse the CAVIAR dataset into mongodb, see further notes below.
-  *
-  */
+ * Created by nkatz at 28/1/20
+ */
 
 object ParseCAVIAR extends ClausalLogicParser {
 
@@ -63,12 +41,12 @@ object ParseCAVIAR extends ClausalLogicParser {
   }
 
   /**
-    * The number of training interpretations for each video is
-    * the number of distinct time points in that video times
-    * the 2-combinations of distinct ids.
-    *
-    * @param path
-    */
+   * The number of training interpretations for each video is
+   * the number of distinct time points in that video times
+   * the 2-combinations of distinct ids.
+   *
+   * @param path
+   */
   def countInterpretations(path: String) = {
     val d = new File(path)
     val idPattern = "id[0-9]+".r
@@ -205,8 +183,8 @@ object ParseCAVIAR extends ClausalLogicParser {
 
   // what is either an LLE, or orientation, appearance, coord
   class NarrativeAtom(val what: String = "none", val id: String, val xcoord: String = "none",
-      val ycoord: String = "none", val orientation: String = "none",
-      val appearance: String = "none", val time: String) extends Atom {
+                      val ycoord: String = "none", val orientation: String = "none",
+                      val appearance: String = "none", val time: String) extends Atom {
 
     val annotationAtom = false
     val atoms = what match {
@@ -219,5 +197,6 @@ object ParseCAVIAR extends ClausalLogicParser {
       case "orientation" => List(s"orientation($id,$orientation,$time)")
     }
   }
+
 
 }

@@ -29,9 +29,9 @@ object Dependency {
     final val ScalaZ = "7.2.29"
     final val SizeOf = "0.1"
     final val Parboiled = "2.1.8"
-    final val Optimus = "3.2.0"
-    final val LoMRF = "1.0.0-SNAPSHOT"
-    //final val Logicutils = "0.1-SNAPSHOT"
+    //final val Optimus = "3.2.0"
+    //final val LoMRF = "1.0.0-SNAPSHOT"
+    final val ORL = "0.1-SNAPSHOT"
   }
 
   // Akka.io
@@ -57,16 +57,7 @@ object Dependency {
     "com.github.vagmcs" %% "scalatikz" % "0.4.4"
   )
 
-  // Optimus library for linear and quadratic optimization
-  lazy val Optimus = Seq(
-    "com.github.vagmcs" %% "optimus" % v.Optimus,
-    "com.github.vagmcs" %% "optimus-solver-lp" % v.Optimus
-  )
-
-  // LoMRF library for Markov Logic Networks
-  lazy val LoMRF = "com.github.anskarl" %% "lomrf" % v.LoMRF
-
-  //lazy val LogicUtils = "com.github.nkatzz" %% "logicutils" % v.Logicutils
+  lazy val ORL = "com.github.nkatzz" %% "orl" % v.ORL
 
   //lazy val vegas = "org.vegas-viz" %% "vegas" % "0.3.12" // plotting library
 }

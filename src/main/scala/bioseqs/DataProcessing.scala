@@ -1,32 +1,14 @@
-/*
- * Copyright (C) 2016  Nikos Katzouris
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-package draftcode_tobe_moved.bioseqs.bioseqs
-
-import java.io.File
-
-import oled.inference.ASPSolver.solve
-import oled.logic.Literal
-
-import scala.io.Source
+package bioseqs
 
 /**
-  * Created by nkatz at 16/1/20
-  */
+ * Created by nkatz at 28/1/20
+ */
+
+import java.io.File
+import oled.inference.ASPSolver.solve
+import oled.logic.Literal
+import scala.io.Source
+
 object DataProcessing extends App {
 
   val interestingPath = "/home/nkatz/dev/BIO-DATA/all_symbolic_results-COMPLETE/final_symbolic_results/interesting"
@@ -134,4 +116,5 @@ object DataProcessing extends App {
   process(interestingPath, "interesting")
   process(nonInterestingPath, "not_interesting")
   //files.foreach(x => println(x.getName))
+
 }

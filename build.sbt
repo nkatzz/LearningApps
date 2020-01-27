@@ -10,6 +10,6 @@ lazy val root = project.in(file("."))
   .settings(libraryDependencies ++= Dependency.Tools)
   .settings(libraryDependencies += Dependency.ScalaTest)
   .settings(libraryDependencies += Dependency.MongoDB)
-  .settings(libraryDependencies += Dependency.LoMRF)
-  .settings(libraryDependencies ++= Dependency.Optimus)
+  .settings(libraryDependencies += Dependency.ORL)
+  
 
