@@ -4,7 +4,7 @@ Various applications of learning with OLED & WOLED, including background knowled
 
 ## Installation
 
-Follow the instructions for downloading and installing ORL (https://github.com/nkatzz/ORL). This project uses ORL as a dependency, so simply run ``sbt +publishLocal`` from within the ORL's root directory. 
+Follow the instructions for downloading and installing ORL (https://github.com/nkatzz/ORL). This project uses ORL as a dependency, so simply run ``sbt +publishLocal`` from within ORL's root directory. 
 
 
 
