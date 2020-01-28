@@ -1,39 +1,55 @@
+/*
+ * Copyright (C) 2016  Nikos Katzouris
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package testcode
 
 import scala.collection.mutable.ListBuffer
 
 /**
- * Created by nkatz at 28/1/20
- */
+  * Created by nkatz at 28/1/20
+  */
 
 object ExtendsIteratorExample extends App {
 
   /**
-   * General blueprint for extending an iterator and performing data pre-processing within its next() method.
-   *
-   * */
+    * General blueprint for extending an iterator and performing data pre-processing within its next() method.
+    *
+    */
 
   /**
-   * A very simple exercise, we're reading a large source of numbers and we're grouping them into mini-batches.
-   * There are two ways to do it. The first reads all the data from the start, the second does it lazily.
-   *
-   * */
+    * A very simple exercise, we're reading a large source of numbers and we're grouping them into mini-batches.
+    * There are two ways to do it. The first reads all the data from the start, the second does it lazily.
+    *
+    */
 
   type MiniBatch = Seq[Int] // just a helper type, you won't need it to modify your code.
 
-
   /**
-   * This is close to what you have been doing.
-   * You are processing all the data with a while loop inside the function, so its natural
-   * that everything happens when you call the function.
-   * */
+    * This is close to what you have been doing.
+    * You are processing all the data with a while loop inside the function, so its natural
+    * that everything happens when you call the function.
+    */
   def wrong(inputSource: Iterator[Int], batchSize: Int) = {
 
     var buffer = new ListBuffer[Int]()
     var batchCounterSize = 0
     val batches = new ListBuffer[MiniBatch]()
 
-    while(inputSource.hasNext) {
+    while (inputSource.hasNext) {
       while (batchCounterSize < batchSize) {
         buffer.append(inputSource.next())
         batchCounterSize += 1
@@ -46,18 +62,18 @@ object ExtendsIteratorExample extends App {
   }
 
   /**
-   *
-   * This is a way to do it lazily. You define a new iterator class that does all the work into its next() method.
-   * So every time you call next() you get a new mini-batch, which you can do whatever you like.
-   *
-   * Here inputSource is just an iterator of numbers.
-   * In your function it should be the iterator you get by reading the input file
-   * (val data = Source.fromFile(dataPath).getLines), so its an Iterator[String].
-   *
-   * This class extends Iterator[MiniBatch], which means that its next()
-   * method returns a mini-batch of the input number sequence. In your code it should return an Iterator[Example].
-   *
-   * */
+    *
+    * This is a way to do it lazily. You define a new iterator class that does all the work into its next() method.
+    * So every time you call next() you get a new mini-batch, which you can do whatever you like.
+    *
+    * Here inputSource is just an iterator of numbers.
+    * In your function it should be the iterator you get by reading the input file
+    * (val data = Source.fromFile(dataPath).getLines), so its an Iterator[String].
+    *
+    * This class extends Iterator[MiniBatch], which means that its next()
+    * method returns a mini-batch of the input number sequence. In your code it should return an Iterator[Example].
+    *
+    */
   class ExampleIterator(val inputSource: Iterator[Int], val batchSize: Int) extends Iterator[MiniBatch] {
 
     def hasNext = inputSource.hasNext
@@ -77,12 +93,12 @@ object ExtendsIteratorExample extends App {
   }
 
   /**
-   * This is the actual function that returns the iterator of examples.
-   * When you call this function nothing happens. Everything happens when you
-   * process the iterator that the function returns as a result.
-   *
-   *
-   * */
+    * This is the actual function that returns the iterator of examples.
+    * When you call this function nothing happens. Everything happens when you
+    * process the iterator that the function returns as a result.
+    *
+    *
+    */
   def right(inputSource: Iterator[Int], batchSize: Int) = new ExampleIterator(inputSource, batchSize)
 
   // Utility function to time the execution of stuff.
@@ -94,10 +110,9 @@ object ExtendsIteratorExample extends App {
     (result, totalTime)
   }
 
-
   /**
-   * Tests
-   * */
+    * Tests
+    */
 
   val (miniBatchesWrong, time1) = time { wrong(1 to 10000000 toIterator, 10) }
 
