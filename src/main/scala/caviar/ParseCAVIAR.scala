@@ -17,12 +17,14 @@
 
 package caviar
 
-import oled.logic.parsers.ClausalLogicParser
 import java.io.File
+
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoClient
 import com.mongodb.casbah.commons.MongoDBObject
 import oled.logic.Literal
+import oled.logic.parsers.ClausalLogicParser
+
 import scala.collection.immutable.SortedMap
 
 /**
@@ -33,9 +35,12 @@ object ParseCAVIAR extends ClausalLogicParser {
 
   /*
   Example({ "_id" : { "$oid" : "56d58f08e4b0842fb35754c8"} , "time" : 1077520 , "annotation" : [ ] ,
-   "narrative" : [ "orientation(id1,128,1077520)" , "happensAt(disappear(id1),1077520)" , "orientation(id3,164,1077520)" , "holdsAt(visible(id3),1077520)" ,
-    "orientation(id4,166,1077520)" , "holdsAt(visible(id4),1077520)" , "happensAt(running(id1),1077520)" , "coords(id1,77,60,1077520)" , "happensAt(walking(id3),1077520)" ,
-     "coords(id3,98,201,1077520)" , "happensAt(inactive(id4),1077520)" , "coords(id4,82,206,1077520)"]},,List(),List(),,false,false,List(),List())
+   "narrative" : [ "orientation(id1,128,1077520)" , "happensAt(disappear(id1),1077520)" ,
+   "orientation(id3,164,1077520)" , "holdsAt(visible(id3),1077520)" ,
+    "orientation(id4,166,1077520)" , "holdsAt(visible(id4),1077520)" ,
+    "happensAt(running(id1),1077520)" , "coords(id1,77,60,1077520)" , "happensAt(walking(id3),1077520)" ,
+     "coords(id3,98,201,1077520)" , "happensAt(inactive(id4),1077520)" ,
+     "coords(id4,82,206,1077520)"]},,List(),List(),,false,false,List(),List())
   */
 
   val fixedBordersDBName = "CAVIAR_Real_FixedBorders"
@@ -57,36 +62,7 @@ object ParseCAVIAR extends ClausalLogicParser {
     run(dataPath, dbname)
   }
 
-  /**
-    * The number of training interpretations for each video is
-    * the number of distinct time points in that video times
-    * the 2-combinations of distinct ids.
-    *
-    * @param path
-    */
-  def countInterpretations(path: String) = {
-    val d = new File(path)
-    val idPattern = "id[0-9]+".r
-    val innerFolders = d.listFiles.sortBy(_.getName.split("-")(0).toInt)
-    var totalSize = 0
-    for (f <- innerFolders) {
-      println(s"Video ${f.getCanonicalPath}")
-      val files = f.listFiles.filter(x => movementOnly.exists(p => x.getName.contains(p)))
-      val contents =
-        (for (f <- files)
-          yield scala.io.Source.fromFile(f).getLines().filter(p => !p.startsWith("%"))).toList.flatten.mkString.replaceAll("\\s", "").split("\\.").toList
-      val parsed = contents.flatMap(x => parseAll(caviarParser(0), x).getOrElse(List(""))).filter(_ != "").asInstanceOf[List[Atom]]
-      //println(parsed map (_.atoms))
-      val allAtoms = parsed flatMap (_.atoms) map (x => Literal.parse(x))
-      val times = allAtoms.map(_.terms.reverse.head.tostring).distinct.length
-      //println(times.length)
-      val ids = parsed.flatMap(_.atoms).flatMap(z => idPattern.findAllIn(z).toList).distinct.length
-      val size = if (ids > 1) (times * oled.utils.Utils.combinations(ids, 2)).toInt else times
-      println(s"current video size: $size")
-      totalSize = totalSize + size
-    }
-    println(s"Total size: $totalSize")
-  }
+
 
   // We'll maintain two versions of CAVIAR: The first will be the corrected one (where examples at "borderlines"
   // where a fluent changes its value, have been corrected -- pushed a frame forward for initiation, add extra
@@ -96,20 +72,25 @@ object ParseCAVIAR extends ClausalLogicParser {
   // The second version is the original one, nothing has been tweaked. It is located under /dev/CAVIAR-abrupt-original
 
   def run(path: String, dbName: String) = {
-    //val dbName = if (fixedBorders) fixedBordersDBName else originalDBName
+
     val mongoClient = MongoClient()
     mongoClient.dropDatabase(dbName)
     val collection = mongoClient(dbName)("examples")
 
     val d = new File(path)
     val innerFolders = d.listFiles.sortBy(_.getName.split("-")(0).toInt)
+
     var lastTime = 0
+
     for (f <- innerFolders) {
+
       println(s"Parsing video ${f.getCanonicalPath}")
+
       val files = f.listFiles.filter(x => dataFileNames.exists(p => x.getName.contains(p)))
+
       val contents =
-        (for (f <- files)
-          yield scala.io.Source.fromFile(f).getLines().filter(p => !p.startsWith("%"))).toList.flatten.mkString.replaceAll("\\s", "").split("\\.").toList
+        (for (f <- files) yield scala.io.Source.fromFile(f).getLines().filter(p => !p.startsWith("%"))).
+          toList.flatten.mkString.replaceAll("\\s", "").split("\\.").toList
 
       val parsed = contents.flatMap(x => parseAll(caviarParser(lastTime), x).getOrElse(List(""))).filter(_ != "").asInstanceOf[List[Atom]]
       val atoms = SortedMap[Int, List[Atom]]() ++ parsed.groupBy(_.time.toInt)
@@ -125,8 +106,6 @@ object ParseCAVIAR extends ClausalLogicParser {
   }
 
   val hleMapping = Map("moving" -> "moving", "fighting" -> "fighting", "leaving_object" -> "leavingObject", "interacting" -> "meeting")
-  val correctedCaviarPath = "/home/nkatz/dev/CAVIAR-abrupt-corrected-borderlines"
-  val originalCaviarPath = "/home/nkatz/dev/CAVIAR-abrupt-original"
   val dataFileNames = List("AppearenceIndv", "MovementIndv", "SituationGrp")
   val movementOnly = List("MovementIndv")
 
@@ -213,6 +192,38 @@ object ParseCAVIAR extends ClausalLogicParser {
       }
       case "orientation" => List(s"orientation($id,$orientation,$time)")
     }
+  }
+
+
+  /**
+   * The number of training interpretations for each video is
+   * the number of distinct time points in that video times
+   * the 2-combinations of distinct ids.
+   *
+   * @param path
+   */
+  def countInterpretations(path: String) = {
+    val d = new File(path)
+    val idPattern = "id[0-9]+".r
+    val innerFolders = d.listFiles.sortBy(_.getName.split("-")(0).toInt)
+    var totalSize = 0
+    for (f <- innerFolders) {
+      println(s"Video ${f.getCanonicalPath}")
+      val files = f.listFiles.filter(x => movementOnly.exists(p => x.getName.contains(p)))
+      val contents =
+        (for (f <- files)
+          yield scala.io.Source.fromFile(f).getLines().filter(p => !p.startsWith("%"))).toList.flatten.mkString.replaceAll("\\s", "").split("\\.").toList
+      val parsed = contents.flatMap(x => parseAll(caviarParser(0), x).getOrElse(List(""))).filter(_ != "").asInstanceOf[List[Atom]]
+      //println(parsed map (_.atoms))
+      val allAtoms = parsed flatMap (_.atoms) map (x => Literal.parse(x))
+      val times = allAtoms.map(_.terms.reverse.head.tostring).distinct.length
+      //println(times.length)
+      val ids = parsed.flatMap(_.atoms).flatMap(z => idPattern.findAllIn(z).toList).distinct.length
+      val size = if (ids > 1) (times * oled.utils.Utils.combinations(ids, 2)).toInt else times
+      println(s"current video size: $size")
+      totalSize = totalSize + size
+    }
+    println(s"Total size: $totalSize")
   }
 
 }

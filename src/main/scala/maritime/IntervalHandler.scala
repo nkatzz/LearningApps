@@ -45,15 +45,13 @@ slow_motion_end|1444281397|1444281397|258088080
 stop_start|1444031990|1444031990|227705102
 stop_end|1444187303|1444187303|259019000*/
 
-
-
 class FileDataOptions(val HLE_Files_Dir: String, val LLE_File: String,
-                      val batch_size: Int = 1, val HLE_bias: List[String],
-                      val LLE_bias: List[String], val target_event: String) extends InputSource
+    val batch_size: Int = 1, val HLE_bias: List[String],
+    val LLE_bias: List[String], val target_event: String) extends InputSource
 
 object IntervalHandler {
 
-  // FOR NOW WILL NOT TAKE ARGUMENTS
+
   def readInputFromFile(opts: FileDataOptions): Iterator[Example] = {
 
     // The path to the folder with RTEC results with HLE intervals.

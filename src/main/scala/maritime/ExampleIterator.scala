@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2016  Nikos Katzouris
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package maritime
 
 import intervalTree.IntervalTree
@@ -7,15 +24,16 @@ import data._
 import scala.collection.mutable.ListBuffer
 
 /**
- * Created by nkatz at 28/1/20
- */
+  * Created by nkatz at 28/1/20
+  */
 
-class ExampleIterator(inputSource: Iterator[String],
-                      batchSize: Int,
-                      targetEvent: String,
-                      LLE_bias: List[String],
-                      mode: String,
-                      opts: FileDataOptions) extends Iterator[Example] {
+class ExampleIterator(
+    inputSource: Iterator[String],
+    batchSize: Int,
+    targetEvent: String,
+    LLE_bias: List[String],
+    mode: String,
+    opts: FileDataOptions) extends Iterator[Example] {
 
   println("Generating intervals tree...")
   val intervalTree: IntervalTree[HLEInterval] = generateIntervalTree(opts.HLE_Files_Dir, opts.HLE_bias)
@@ -26,12 +44,12 @@ class ExampleIterator(inputSource: Iterator[String],
   def hasNext: Boolean = inputSource.hasNext
 
   /**
-   * Parses the input data into logical syntax and generates data mini-batches for training.
-   *
-   * A data batch is a chunk of input data of given size. Size is measured by temporal duration,
-   * so given batchSize = n, a mini-batch consists of input data with time stamps t to t+n.
-   *
-   */
+    * Parses the input data into logical syntax and generates data mini-batches for training.
+    *
+    * A data batch is a chunk of input data of given size. Size is measured by temporal duration,
+    * so given batchSize = n, a mini-batch consists of input data with time stamps t to t+n.
+    *
+    */
 
   def next(): Example = {
     var currentBatch = new ListBuffer[String]

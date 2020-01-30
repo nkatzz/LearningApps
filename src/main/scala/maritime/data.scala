@@ -18,7 +18,6 @@
 import intervalTree.IntervalTree
 import scala.collection.JavaConverters._
 
-
 /**
   * Created by nkatz on 18/12/19.
   */
