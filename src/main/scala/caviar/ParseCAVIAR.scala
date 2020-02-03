@@ -125,7 +125,9 @@ object ParseCAVIAR extends ClausalLogicParser {
   def inactive: Parser[String] = "inactive"
   def running: Parser[String] = "running"
   def abrupt: Parser[String] = "abrupt"
-  def happens: Parser[String] = "happensAt"
+  def happens1: Parser[String] = "happensAt"
+  def happens2: Parser[String] = "happens"
+  def happens = happens1 | happens2
   def holds: Parser[String] = "holdsAt"
   def orientation: Parser[String] = "orientation"
   def appearance: Parser[String] = "appearance"
@@ -167,13 +169,21 @@ object ParseCAVIAR extends ClausalLogicParser {
     val time: String
   }
 
+  var count = 0
+
   class AnnotationAtom(val HLE: String, val persons: List[Person], val time: String) extends Atom {
     val annotationAtom = true
     val atoms =
       if (HLE == "leaving_object") {
         List(s"holdsAt(${hleMapping(HLE)}(${persons.head.id},${persons(1).id}),$time)")
       } else {
-        persons.toSet.subsets(2).flatMap(y => for (z <- y.toList.permutations) yield s"holdsAt(${hleMapping(HLE)}(${z.head.id},${z(1).id}),$time)").toList
+        val x = persons.toSet.subsets(2).flatMap(y => for (z <- y.toList.permutations) yield s"holdsAt(${hleMapping(HLE)}(${z.head.id},${z(1).id}),$time)").toList
+        if (hleMapping(HLE) == "moving") {
+          //println(x)
+          //count += x.length
+          //println(count)
+        }
+        x
       }
   }
 
