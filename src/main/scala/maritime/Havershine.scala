@@ -15,27 +15,24 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import intervalTree.IntervalTree
-
-import scala.collection.JavaConverters._
+package maritime
 
 /**
   * Created by nkatz on 18/12/19.
   */
-package object data {
 
-  implicit class ITree[T](val tree: IntervalTree[T]) {
+object Havershine {
 
-    def +=(from: Long, to: Long, data: T): Unit = tree.addInterval(from, to, data)
+  import math._
 
-    def range(from: Long, to: Long): List[(Long, Long, T)] = {
-      tree.getIntervals(from, to).asScala.toList.map { i =>
-        if (from < i.getStart && to > i.getStart) (i.getStart, to, i.getData)
-        else if (from >= i.getStart && to > i.getEnd) (from, i.getEnd, i.getData)
-        else (from, to, i.getData)
-      }
-    }
+  val R = 6372.8 //radius in km
 
+  def haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double) = {
+    val dLat = (lat2 - lat1).toRadians
+    val dLon = (lon2 - lon1).toRadians
+
+    val a = pow(sin(dLat / 2), 2) + pow(sin(dLon / 2), 2) * cos(lat1.toRadians) * cos(lat2.toRadians)
+    val c = 2 * asin(sqrt(a))
+    R * c
   }
-
 }

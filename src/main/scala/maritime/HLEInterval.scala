@@ -18,10 +18,8 @@
 package maritime
 
 /**
-  * Created by nkatz at 28/1/20
+  * Created by nkatz on 18/12/19.
   */
-
-class HLEInterval(val hle: String, val vessels: List[String], val value: String, val stime: Long, val etime: Long)
 
 object HLEInterval {
 
@@ -36,12 +34,12 @@ object HLEInterval {
       "speedLessThanMin", "stopped", "travelSpeed", "trawling", "trawlSpeed", "underWay", "unusualSpeed")
     */
 
-    val mine_hle_event_set = Set("highSpeedNC", "lowSpeed", "stopped", "proximity", "trawlingMovement",
+    val mine_hle_event_set = Set("highSpeedNC", "lowSpeed", "stopped", "trawlingMovement",
       "gap", "loitering", "changingSpeed", "tuggingSpeed", "trawling",
       "anchoredOrMoored", "sarSpeed", "sar", "trawlSpeed", "underWay",
-      "movingSpeed", "drifting", "sarMovement", "pilotBoarding")
+      "movingSpeed", "drifting", "sarMovement")
 
-    // rendezVous, tugging
+    // rendezVous, tugging, proximity, pilotBoarding
     if (mine_hle_event_set.contains(hle)) {
       val vessels = List(split(1))
       val value = split(3)
@@ -67,5 +65,7 @@ object HLEInterval {
 
     } else throw new RuntimeException(s"Don't know what to do with $hleLine")
   }
-
 }
+
+class HLEInterval(val hle: String, val vessels: List[String], val value: String, val stime: Long, val etime: Long)
+

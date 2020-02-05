@@ -62,8 +62,6 @@ object ParseCAVIAR extends ClausalLogicParser {
     run(dataPath, dbname)
   }
 
-
-
   // We'll maintain two versions of CAVIAR: The first will be the corrected one (where examples at "borderlines"
   // where a fluent changes its value, have been corrected -- pushed a frame forward for initiation, add extra
   // annotated frame for termination). This has happened everywhere (consulting the narrative at the same time),
@@ -204,14 +202,13 @@ object ParseCAVIAR extends ClausalLogicParser {
     }
   }
 
-
   /**
-   * The number of training interpretations for each video is
-   * the number of distinct time points in that video times
-   * the 2-combinations of distinct ids.
-   *
-   * @param path
-   */
+    * The number of training interpretations for each video is
+    * the number of distinct time points in that video times
+    * the 2-combinations of distinct ids.
+    *
+    * @param path
+    */
   def countInterpretations(path: String) = {
     val d = new File(path)
     val idPattern = "id[0-9]+".r

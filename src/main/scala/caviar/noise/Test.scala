@@ -22,7 +22,7 @@ package caviar.noise
   */
 object Test extends App {
 
-  def presision(tps: Int, fps: Int) = tps.toDouble/(tps.toDouble+fps.toDouble)
+  def presision(tps: Int, fps: Int) = tps.toDouble / (tps.toDouble + fps.toDouble)
 
   //tps * (Math.log(thisCoverage) - Math.log(parentCoverage))
 
@@ -35,20 +35,14 @@ object Test extends App {
 
   val max = 182.toDouble * (-Math.log(parentPrecision))
 
-
-
   val normalizedGain = _gain / max
 
   println(_gain)
   println(normalizedGain)
 
+  def foilGain(thisTPs: Int, thisFPs: Int, parentTPs: Int, parentFPs: Int) = {
 
-
-
-
-  def foilGain(thisTPs: Int, thisFPs: Int, parentTPs: Int, parentFPs: Int ) = {
-
-    def precision(tps: Int, fps: Int) = tps.toDouble/(tps.toDouble+fps.toDouble)
+      def precision(tps: Int, fps: Int) = tps.toDouble / (tps.toDouble + fps.toDouble)
 
     val thisCoverage = precision(thisTPs, thisFPs)
     val parentCoverage = precision(parentTPs, parentFPs)
@@ -85,8 +79,6 @@ object Test extends App {
     }
   }
 
-  println(foilGain(48,0,182,182))
-
-
+  println(foilGain(48, 0, 182, 182))
 
 }

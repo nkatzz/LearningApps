@@ -1,8 +1,25 @@
+/*
+ * Copyright (C) 2016  Nikos Katzouris
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package caviar
 
 /**
- * Created by nkatz at 30/1/20
- */
+  * Created by nkatz at 30/1/20
+  */
 
 import java.io.File
 import ParseCAVIAR._
@@ -20,11 +37,10 @@ object ParseCAVIAR_DB_per_video {
     runNew(dataPath)
   }
 
-
   /**
-   * This is the new way to pair the data, where each example is the narrative
-   * at some time point and the annotation at the next time point.
-   * */
+    * This is the new way to pair the data, where each example is the narrative
+    * at some time point and the annotation at the next time point.
+    */
   def runNew(path: String) = {
 
     val mongoClient = MongoClient()
@@ -43,7 +59,7 @@ object ParseCAVIAR_DB_per_video {
         (for (f <- files)
           yield scala.io.Source.fromFile(f).getLines().filter(p => !p.startsWith("%"))).
           toList.flatten.mkString.replaceAll("\\s", "").split("\\."
-        ).toList
+          ).toList
 
       val parsed = contents.flatMap(x => parseAll(caviarParser(0), x).getOrElse(List(""))).filter(_ != "").asInstanceOf[List[Atom]]
 
@@ -97,12 +113,10 @@ object ParseCAVIAR_DB_per_video {
     }
   }
 
-
-
   /**
-   * This is the old way to pair the data, where each example is the narrative
-   * and the annotation at one particular time point.
-   * */
+    * This is the old way to pair the data, where each example is the narrative
+    * and the annotation at one particular time point.
+    */
   def runOld(path: String) = {
 
     val mongoClient = MongoClient()
@@ -122,7 +136,7 @@ object ParseCAVIAR_DB_per_video {
         (for (f <- files)
           yield scala.io.Source.fromFile(f).getLines().filter(p => !p.startsWith("%"))).
           toList.flatten.mkString.replaceAll("\\s", "").split("\\."
-        ).toList
+          ).toList
 
       val parsed = contents.flatMap(x => parseAll(caviarParser(0), x).getOrElse(List(""))).filter(_ != "").asInstanceOf[List[Atom]]
 
