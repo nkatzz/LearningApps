@@ -116,12 +116,12 @@ object Runner extends LazyLogging {
         }
         */
         val fileOpts = new FileDataOptions(HLE_Files_Dir = HLE_Dir_Path, LLE_File = LLEs_File, allHLEs = allHLEs, allLLEs = allLLEs,
-          runOpts       = runningOptions, false)
+                                           runOpts       = runningOptions, false)
 
         val trainingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
         val testingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
 
-        /*val data = trainingDataFunction(fileOpts)
+        val data = trainingDataFunction(fileOpts)
 
         var batchCount = 0
         while (data.hasNext) {
@@ -130,7 +130,7 @@ object Runner extends LazyLogging {
           //println(d.observations + "\n")
           println(batchCount)
           batchCount += 1
-        }*/
+        }
 
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
@@ -140,7 +140,7 @@ object Runner extends LazyLogging {
         //                                                            testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         val coordinator = system.actorOf(Props(new LocalCoordinator(runningOptions, fileOpts,
-          fileOpts, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+                                                                    fileOpts, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 
