@@ -226,20 +226,24 @@ object IntervalHandler {
 
         if (!inputSource.hasNext) timesAccum += INF_TS
 
-        var extras: List[String] = intervals.flatMap((interval) =>{ if (interval._3.stime >= timesAccum.head){
-                                                        if(opts.allLLEs.contains(interval._3.hle)) {
-                                                          timesAccum += interval._3.stime
-                                                        }
-                                                        HLEIntervalToAtom(interval._3, interval._3.stime.toString, "None", opts.allHLEs)
-                                                      } else{ List("None")}})
+        var extras: List[String] = intervals.flatMap((interval) => {
+          if (interval._3.stime >= timesAccum.head) {
+            if (opts.allLLEs.contains(interval._3.hle)) {
+              timesAccum += interval._3.stime
+            }
+            HLEIntervalToAtom(interval._3, interval._3.stime.toString, "None", opts.allHLEs)
+          } else { List("None") }
+        })
 
-        extras = extras ++ intervals.flatMap((interval) =>{ if (interval._3.etime <= (timesAccum - timesAccum.last).last) {
-                                                              if(opts.allLLEs.contains(interval._3.hle)) {
-                                                                timesAccum += interval._3.stime
-                                                              }
+        extras = extras ++ intervals.flatMap((interval) => {
+          if (interval._3.etime <= (timesAccum - timesAccum.last).last) {
+            if (opts.allLLEs.contains(interval._3.hle)) {
+              timesAccum += interval._3.stime
+            }
 
-                                                              HLEIntervalToAtom(interval._3, interval._3.etime.toString, "None", opts.allHLEs)
-                                                            } else List("None")})
+            HLEIntervalToAtom(interval._3, interval._3.etime.toString, "None", opts.allHLEs)
+          } else List("None")
+        })
 
         //what is the use of this line?
         val nexts = timesAccum.sliding(2).map(x => if (mode == "asp") s"next(${x.last},${x.head})" else s"next(${x.last},${x.head})")
@@ -258,9 +262,9 @@ object IntervalHandler {
         prev_batch_timestamp = timesAccum.last
 
         extras = extras ++ (timesAccum - timesAccum.last).flatMap { timeStamp =>
-          val containedIn = intervals.filter(interval => (//(opts.allHLEs.contains(interval._3.hle) && interval._3.stime < nextsHashMap(timeStamp)
+          val containedIn = intervals.filter(interval => ( //(opts.allHLEs.contains(interval._3.hle) && interval._3.stime < nextsHashMap(timeStamp)
             //&& nextsHashMap(timeStamp) < interval._3.etime) ||
-            (/*opts.allLLEs.contains(interval._3.hle) &&*/ interval._3.stime < timeStamp && timeStamp < interval._3.etime)))
+            ( /*opts.allLLEs.contains(interval._3.hle) &&*/ interval._3.stime < timeStamp && timeStamp < interval._3.etime)))
 
           containedIn.flatMap(x =>
             {
@@ -275,13 +279,13 @@ object IntervalHandler {
                   if (Random.nextDouble <= deleteProb) {
                     List()
                   } else {
-                    HLEIntervalToAtom(x._3, timeStamp.toString, "None"/*nextsHashMap(timeStamp).toString*/, opts.allHLEs)
+                    HLEIntervalToAtom(x._3, timeStamp.toString, "None" /*nextsHashMap(timeStamp).toString*/ , opts.allHLEs)
                   }
                 } else {
-                  HLEIntervalToAtom(x._3, timeStamp.toString, "None"/*nextsHashMap(timeStamp).toString*/, opts.allHLEs)
+                  HLEIntervalToAtom(x._3, timeStamp.toString, "None" /*nextsHashMap(timeStamp).toString*/ , opts.allHLEs)
                 }
               } else {
-                HLEIntervalToAtom(x._3, timeStamp.toString, "None"/*nextsHashMap(timeStamp).toString*/, opts.allHLEs) // If I dont add noise I just need this line
+                HLEIntervalToAtom(x._3, timeStamp.toString, "None" /*nextsHashMap(timeStamp).toString*/ , opts.allHLEs) // If I dont add noise I just need this line
               }
             })
         } toList

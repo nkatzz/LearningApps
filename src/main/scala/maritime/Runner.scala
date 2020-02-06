@@ -123,6 +123,7 @@ object Runner extends LazyLogging {
 
         val data = trainingDataFunction(fileOpts)
 
+        /*
         var batchCount = 0
         while (data.hasNext) {
           val d = data.next()
@@ -131,6 +132,7 @@ object Runner extends LazyLogging {
           println(batchCount)
           batchCount += 1
         }
+         */
 
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
