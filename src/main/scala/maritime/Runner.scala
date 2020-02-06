@@ -115,14 +115,16 @@ object Runner extends LazyLogging {
           vesselCoordinatesMap += ((currMMSI, currTime) -> new Coordinate(currLong, currLat))
         }
         */
-        val fileOpts = new FileDataOptions(HLE_Files_Dir = HLE_Dir_Path, LLE_File = LLEs_File, allHLEs = allHLEs, allLLEs = allLLEs,
-                                           runOpts       = runningOptions, false)
+        val fileOpts = new FileDataOptions(HLE_Files_Dir = HLE_Dir_Path, LLE_File = LLEs_File,
+          allHLEs = allHLEs, allLLEs = allLLEs, runOpts = runningOptions, false)
 
         val trainingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
         val testingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
 
-        val data = trainingDataFunction(fileOpts)
 
+
+        /*
+        val data = trainingDataFunction(fileOpts)
         var batchCount = 0
         while (data.hasNext) {
           val d = data.next()
@@ -130,7 +132,7 @@ object Runner extends LazyLogging {
           //println(d.observations + "\n")
           println(batchCount)
           batchCount += 1
-        }
+        }*/
 
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore

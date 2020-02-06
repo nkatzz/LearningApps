@@ -21,25 +21,20 @@ package maritime
   * Created by nkatz on 18/12/19.
   */
 
-import java.io.{BufferedWriter, File, FileWriter}
+import java.io.File
 
-import intervalTree.IntervalTree
-import data._
-
-import scala.collection.mutable.ListBuffer
-import scala.io.Source
-import oled.datahandling.Example
-import java.time._
-
-import oled.app.runutils.InputHandling.InputSource
-import com.vividsolutions.jts.geom
-import com.vividsolutions.jts.geom.{Coordinate, Geometry, GeometryFactory, Point}
-import com.vividsolutions.jts.io
+import com.vividsolutions.jts.geom.{Coordinate, Geometry, GeometryFactory}
 import com.vividsolutions.jts.io.WKTReader
 import com.vividsolutions.jts.operation.distance.DistanceOp
+import data._
+import intervalTree.IntervalTree
+import oled.app.runutils.InputHandling.InputSource
 import oled.app.runutils.RunningOptions
+import oled.datahandling.Example
 
-import scala.collection.{SortedSet, mutable}
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+import scala.io.Source
 import scala.util.Random
 
 // Reads data in this format:
@@ -74,7 +69,10 @@ object IntervalHandler {
   def readInputFromFile(opts: FileDataOptions): Iterator[Example] = {
     // The path to the folder with RTEC results with HLE intervals. The generateIntervalTree
     // methods reads from those files (see the method).
-    val pathToCoastFile = "/home/manosl/Desktop/BSc_Thesis/Datasets/European Coastline/Europe_Coastline_converted_WKT_Format.txt"
+
+    val coastFile = opts.runOpts.entryPath+"/Europe_Coastline_converted_WKT_Format.txt"
+
+    val pathToCoastFile = coastFile
 
     val wkt_of_map = Source.fromFile(pathToCoastFile).getLines().next()
 
@@ -127,6 +125,9 @@ object IntervalHandler {
       def next() = {
         var currentBatch = nextBatch.clone()
         var vesselDistanceMap = nextCoordDistanceMap.clone()
+
+        println(vesselDistanceMap)
+
         nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
 
         var timesAccum = scala.collection.mutable.SortedSet[Long]()
