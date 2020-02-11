@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package maritime
+package maritime1
 
 /**
   * Created by nkatz at 28/1/20
@@ -47,13 +47,22 @@ object Runner extends LazyLogging {
     */
     // LLEs to happensAt, HLEs to holdsAt
 
-    val allLLEs = List("gap_end", /*"coord", "velocity",*/ "change_in_heading", "entersArea",
+    /*val allLLEs = List("gap_end", /*"coord", "velocity",*/ "change_in_heading", "entersArea",
       "stop_start", "change_in_speed_start", "gap_start", "change_in_speed_end",
       "stop_end", "leavesArea", "slow_motion_end", "slow_motion_start", "withinArea", "stopped", "highSpeedNC",
-      "movingSpeed", "underWay", "proximity", "changingSpeed", "gap", "lowSpeed", "trawlSpeed", "sarSpeed")
+      "movingSpeed", "underWay", "proximity", "changingSpeed", "gap", "lowSpeed", "trawlSpeed", "sarSpeed" )*/
 
-    val allHLEs = List("anchoredOrMoored", "trawlingMovement", "drifting", "loitering", "sarMovement",
-      "rendezVous", "pilotBoarding", "trawling", "sar", "tugging")
+    // Missing:
+    // "trawlSpeed", "sarSpeed", "withinArea", "highSpeedNC", "movingSpeed", "underWay", "changingSpeed", , "gap"
+    val allLLEs = List("gap_end", /*"coord", "velocity",*/ "change_in_heading", "entersArea",
+      "stop_start", "change_in_speed_start", "gap_start", "change_in_speed_end",
+      "stop_end", "leavesArea", "slow_motion_end", "slow_motion_start", "stopped",
+      "proximity", "lowSpeed")
+
+    /*val allHLEs = List("anchoredOrMoored", "trawlingMovement", "drifting", "loitering", "sarMovement",
+      "rendezVous", "pilotBoarding", "trawling", "sar", "tugging")*/
+
+    val allHLEs = List("rendezVous")
 
     val argsok = CMDArgs.argsOk(args)
 
@@ -116,20 +125,29 @@ object Runner extends LazyLogging {
         }
         */
         val fileOpts = new FileDataOptions(HLE_Files_Dir = HLE_Dir_Path, LLE_File = LLEs_File,
-                                           allHLEs       = allHLEs, allLLEs = allLLEs, runOpts = runningOptions, false)
+                                           allHLEs       = allHLEs, allLLEs = allLLEs, runOpts = runningOptions)
 
         val trainingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
         val testingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
 
-        /*
-        val data = trainingDataFunction(fileOpts)
+        /*val data = trainingDataFunction(fileOpts)
         var batchCount = 0
         while (data.hasNext) {
+          val t1 = System.nanoTime()
+
           val d = data.next()
+
+          val duration_sec = (System.nanoTime() - t1) / 1e9d
+
+          print(s"BatchTime: $duration_sec")
+          print(" ")
           //println(d.queryAtoms)
           //println(d.observations + "\n")
           println(batchCount)
           batchCount += 1
+
+          println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+
         }*/
 
         val system = ActorSystem("LocalLearningSystem")
