@@ -15,26 +15,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package maritime
+package maritime1
 
 /**
   * Created by nkatz at 28/1/20
   */
 
-import java.io.File
-import java.io.PrintWriter
-
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.scalalogging.LazyLogging
 import oled.app.runutils.CMDArgs
-import oled.app.runutils.InputHandling.{MongoDataOptions, getMongoData}
-//import maritime.InputHandling.getMongoData
 import oled.datahandling.Example
 import oled.learning.LocalCoordinator
 import oled.learning.Types.RunSingleCore
 import IntervalHandler.readInputFromFile
-import ParseMaritime.ParseFileDataOptions
-import ParseMaritime.ParseMaritime.writeDataToMongo
 
 object Runner extends LazyLogging {
 
@@ -54,15 +47,13 @@ object Runner extends LazyLogging {
     */
     // LLEs to happensAt, HLEs to holdsAt
 
-    // Missing: "trawlSpeed", "sarSpeed", "withinArea", "highSpeedNC",
-    //"movingSpeed", "underWay", "changingSpeed", , "gap"
+    val allLLEs = List("gap_end", /*"coord", "velocity",*/ "change_in_heading", "entersArea",
+      "stop_start", "change_in_speed_start", "gap_start", "change_in_speed_end",
+      "stop_end", "leavesArea", "slow_motion_end", "slow_motion_start", "withinArea", "stopped", "highSpeedNC",
+      "movingSpeed", "underWay", "proximity", "changingSpeed", "gap", "lowSpeed", "trawlSpeed", "sarSpeed")
 
-    val allLLEs = List("gap_end", /*"coord", "velocity",*/
-      "change_in_heading", "entersArea","stop_start", "change_in_speed_start",
-      "gap_start", "change_in_speed_end","stop_end", "leavesArea",
-      "slow_motion_end", "slow_motion_start", "stopped","proximity", "lowSpeed")
-
-    val allHLEs = List("rendezVous")
+    val allHLEs = List("anchoredOrMoored", "trawlingMovement", "drifting", "loitering", "sarMovement",
+      "rendezVous", "pilotBoarding", "trawling", "sar", "tugging")
 
     val argsok = CMDArgs.argsOk(args)
 
@@ -74,6 +65,16 @@ object Runner extends LazyLogging {
 
       // I should find a better way
       val bias_fluents = bias_list.map(clause => clause.split('(')(2)).toSet.toList ++ bias_list.map(clause => clause.split('(')(3)).toSet.toList
+      */
+
+      /*
+      val train1 = Vector("caviar-video-1-meeting-moving", "caviar-video-3", "caviar-video-2-meeting-moving", "caviar-video-5",
+        "caviar-video-6", "caviar-video-13-meeting", "caviar-video-7", "caviar-video-8", "caviar-video-14-meeting-moving",
+        "caviar-video-9", "caviar-video-10", "caviar-video-11", "caviar-video-12-moving", "caviar-video-19-meeting-moving",
+        "caviar-video-20-meeting-moving", "caviar-video-15", "caviar-video-16", "caviar-video-21-meeting-moving",
+        "caviar-video-17", "caviar-video-18", "caviar-video-22-meeting-moving", "caviar-video-4", "caviar-video-23-moving",
+        "caviar-video-25", "caviar-video-24-meeting-moving", "caviar-video-26", "caviar-video-27", "caviar-video-28-meeting",
+        "caviar-video-29", "caviar-video-30")
       */
 
       val evalOneTestSet = false
@@ -114,27 +115,31 @@ object Runner extends LazyLogging {
           vesselCoordinatesMap += ((currMMSI, currTime) -> new Coordinate(currLong, currLat))
         }
         */
+        val fileOpts = new FileDataOptions(HLE_Files_Dir = HLE_Dir_Path, LLE_File = LLEs_File,
+                                           allHLEs       = allHLEs, allLLEs = allLLEs, runOpts = runningOptions)
 
-        val trainingDataOptions = new MongoDataOptions(dbNames       = Vector(runningOptions.train), chunkSize = runningOptions.chunkSize,
-          targetConcept = runningOptions.targetHLE, sortDbByField = "time", what = "training")
+        val trainingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
+        val testingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
 
-        val trainingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
-        val testingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
 
-        /*
-        val writer = new PrintWriter(new File("yolo.txt"))
         val data = trainingDataFunction(fileOpts)
         var batchCount = 0
         while (data.hasNext) {
+          val t1 = System.nanoTime()
+
           val d = data.next()
+
+          val duration_sec = (System.nanoTime() - t1) / 1e9d
+
+          print(duration_sec)
+          print(" ")
           //println(d.queryAtoms)
           //println(d.observations + "\n")
           println(batchCount)
           batchCount += 1
-          writer.println(d.observations)
-          writer.println(d.queryAtoms)
+
         }
-        */
+
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
 
@@ -142,8 +147,8 @@ object Runner extends LazyLogging {
         //val coordinator = system.actorOf(Props(new LocalCoordinator(runningOptions, trainingDataOptions,
         //                                                            testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
-        val coordinator = system.actorOf(Props(new LocalCoordinator(runningOptions, trainingDataOptions,
-                                                trainingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+        val coordinator = system.actorOf(Props(new LocalCoordinator(runningOptions, fileOpts,
+                                                                    fileOpts, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 
