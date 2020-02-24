@@ -32,7 +32,17 @@ object Dependency {
     //final val Optimus = "3.2.0"
     //final val LoMRF = "1.0.0-SNAPSHOT"
     final val ORL = "0.1-SNAPSHOT"
+    final val Kafka = "2.4.0"
+    final val Jackson = "2.10.1"
   }
+
+  lazy val Kafka = "org.apache.kafka" % "kafka-clients" % v.Kafka
+
+  // Object Serializer
+  lazy val Jackson = Seq(
+    "com.fasterxml.jackson.core" % "jackson-databind" % v.Jackson,
+    "com.fasterxml.jackson.module" %% "jackson-module-scala" % v.Jackson
+  )
 
   // Akka.io
   lazy val Akka = "com.typesafe.akka" %% "akka-actor" % v.Akka
