@@ -26,12 +26,12 @@ import java.io.PrintWriter
 
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.scalalogging.LazyLogging
-import oled.app.runutils.CMDArgs
-import oled.app.runutils.InputHandling.{MongoDataOptions, getMongoData}
+import orl.app.runutils.CMDArgs
+import orl.datahandling.InputHandling.{MongoDataOptions, getMongoData}
 //import maritime.InputHandling.getMongoData
-import oled.datahandling.Example
-import oled.learning.LocalCoordinator
-import oled.learning.Types.RunSingleCore
+import orl.datahandling.Example
+import orl.learning.LocalCoordinator
+import orl.learning.Types.RunSingleCore
 import IntervalHandler.readInputFromFile
 import ParseMaritime.ParseFileDataOptions
 import ParseMaritime.ParseMaritime.writeDataToMongo
@@ -123,8 +123,11 @@ object Runner extends LazyLogging {
           targetConcept = runningOptions.targetHLE, sortDbByField = "time", what = "training")*/
 
 
-        val trainingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
-        val testingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
+        //val trainingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
+        //val testingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
+
+        val trainingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
+        val testingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
 
 
 
@@ -136,8 +139,7 @@ object Runner extends LazyLogging {
         //val coordinator = system.actorOf(Props(new LocalCoordinator(runningOptions, trainingDataOptions,
         //                                                            testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
-        val coordinator = system.actorOf(Props(new LocalCoordinator(runningOptions, trainingDataOptions,
-                                                trainingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+        val coordinator = system.actorOf(Props(new LocalCoordinator(runningOptions, fileOpts, fileOpts, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 

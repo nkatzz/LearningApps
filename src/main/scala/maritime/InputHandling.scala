@@ -19,8 +19,8 @@ package maritime
 
 import com.mongodb.casbah.commons.MongoDBObject
 import com.mongodb.casbah.{MongoClient, MongoCollection}
-import oled.datahandling.Example
-import oled.app.runutils.InputHandling.MongoDataOptions
+import orl.datahandling.Example
+import orl.datahandling.InputHandling.MongoDataOptions
 
 /**
   * Created by nkatz at 13/12/19

@@ -4,11 +4,11 @@ import akka.actor.{ActorSystem, Props}
 import com.typesafe.scalalogging.LazyLogging
 import maritime.FileDataOptions
 import maritime.Runner.logger
-import oled.app.runutils.CMDArgs
-import oled.app.runutils.InputHandling.{MongoDataOptions, getMongoData}
-import oled.datahandling.Example
-import oled.learning.LocalCoordinator
-import oled.learning.Types.RunSingleCore
+import orl.app.runutils.CMDArgs
+import orl.datahandling.InputHandling.{MongoDataOptions, getMongoData}
+import orl.datahandling.Example
+import orl.learning.LocalCoordinator
+import orl.learning.Types.RunSingleCore
 import ParseMaritime.writeDataToMongo
 
 object Runner extends LazyLogging {

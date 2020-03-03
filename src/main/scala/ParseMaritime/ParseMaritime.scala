@@ -10,8 +10,8 @@ import com.vividsolutions.jts.operation.distance.DistanceOp
 import data._
 import intervalTree.IntervalTree
 import maritime.{HLEInterval, Havershine}
-import oled.app.runutils.InputHandling.InputSource
-import oled.app.runutils.RunningOptions
+import orl.app.runutils.RunningOptions
+import orl.datahandling.InputHandling.InputSource
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer

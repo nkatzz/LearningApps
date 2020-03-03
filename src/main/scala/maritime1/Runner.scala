@@ -23,10 +23,10 @@ package maritime1
 
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.scalalogging.LazyLogging
-import oled.app.runutils.CMDArgs
-import oled.datahandling.Example
-import oled.learning.LocalCoordinator
-import oled.learning.Types.RunSingleCore
+import orl.app.runutils.CMDArgs
+import orl.datahandling.Example
+import orl.learning.LocalCoordinator
+import orl.learning.Types.RunSingleCore
 import IntervalHandler.readInputFromFile
 
 object Runner extends LazyLogging {
