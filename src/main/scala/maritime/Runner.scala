@@ -115,26 +115,20 @@ object Runner extends LazyLogging {
         }
         */
 
-        val trainingDataOptions = new MongoDataOptions(dbNames       = Vector(runningOptions.train), chunkSize = runningOptions.chunkSize,
-          targetConcept = runningOptions.targetHLE, sortDbByField = "time", what = "training")
+        val fileOpts = new FileDataOptions(HLE_Files_Dir = HLE_Dir_Path, LLE_File = LLEs_File,
+          allHLEs = allHLEs, allLLEs = allLLEs, runOpts = runningOptions, false)
+
+
+        /*val trainingDataOptions = new MongoDataOptions(dbNames       = Vector(runningOptions.train), chunkSize = runningOptions.chunkSize,
+          targetConcept = runningOptions.targetHLE, sortDbByField = "time", what = "training")*/
+
 
         val trainingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
         val testingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
 
-        /*
-        val writer = new PrintWriter(new File("yolo.txt"))
-        val data = trainingDataFunction(fileOpts)
-        var batchCount = 0
-        while (data.hasNext) {
-          val d = data.next()
-          //println(d.queryAtoms)
-          //println(d.observations + "\n")
-          println(batchCount)
-          batchCount += 1
-          writer.println(d.observations)
-          writer.println(d.queryAtoms)
-        }
-        */
+
+
+
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
 

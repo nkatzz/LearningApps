@@ -123,8 +123,13 @@ object IntervalHandler {
       def hasNext = inputSource.hasNext
 
       def next() = {
+
         var currentBatch = nextBatch
         var vesselDistanceMap = nextCoordDistanceMap
+
+        println(vesselDistanceMap)
+
+        nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
 
         var timesAccum = scala.collection.mutable.SortedSet[Long]()
         var coordTimesAccum = scala.collection.mutable.SortedSet[Long]()
