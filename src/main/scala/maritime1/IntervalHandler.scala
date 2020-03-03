@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package maritime
+package maritime1
 
 /**
   * Created by nkatz on 18/12/19.
@@ -60,8 +60,7 @@ class MongoDataOptions(val dbNames: Vector[String], val chunkSize: Int = 1,
 */
 
 class FileDataOptions(val HLE_Files_Dir: String, val LLE_File: String,
-    val allHLEs: List[String], val allLLEs: List[String], val runOpts: RunningOptions,
-    val addNoise: Boolean) extends InputSource
+    val allHLEs: List[String], val allLLEs: List[String], val runOpts: RunningOptions) extends InputSource
 
 object IntervalHandler {
 
@@ -69,22 +68,6 @@ object IntervalHandler {
   def readInputFromFile(opts: FileDataOptions): Iterator[Example] = {
     // The path to the folder with RTEC results with HLE intervals. The generateIntervalTree
     // methods reads from those files (see the method).
-
-    val coastFile = opts.runOpts.entryPath + "/Europe_Coastline_converted_WKT_Format.txt"
-
-    val pathToCoastFile = coastFile
-
-    val wkt_of_map = Source.fromFile(pathToCoastFile).getLines().next()
-
-    val WKT_Reader: WKTReader = new WKTReader()
-    val map_polygons: Geometry = WKT_Reader.read(wkt_of_map)
-
-    val geom_factory: GeometryFactory = new GeometryFactory()
-
-    // Right way to get distance
-    val n_points = DistanceOp.nearestPoints(map_polygons, geom_factory.createPoint(new Coordinate(-4.3472633, 48.118046)))
-
-    println(Havershine.haversine(n_points(0).y, n_points(0).x, n_points(1).y, n_points(1).x) * 1000) // in meters
 
     val pathToHLEIntervals = opts.HLE_Files_Dir
 
@@ -96,7 +79,7 @@ object IntervalHandler {
     val intervalTree =
       generateIntervalTree(
         pathToHLEIntervals,
-        opts.allLLEs ++ opts.allHLEs // Because there are some HLEs in allLLEs
+        opts.allHLEs ++ opts.allLLEs // Because there are some HLEs in allLLEs
       )
 
     // mode is either "asp" or "mln"
@@ -107,37 +90,26 @@ object IntervalHandler {
       * so given batchSize = n, a mini-batch consists of input data with time stamps t to t+n.
       *
       */
-    class ExampleIterator(inputSource: Iterator[String], coordInput: Iterator[String], batchSize: Int, targetEvent: String, mode: String)
+    class ExampleIterator(inputSource: Iterator[String], batchSize: Int, targetEvent: String, mode: String)
       extends Iterator[Example] {
       var prev_batch_timestamp: Long = 0
       var batchCount = 0
 
       // They are used to help me to get what it should to next batch
-      var nextBatchLLEsAccum = scala.collection.mutable.SortedSet[String]()
-      var nextBatch = new ListBuffer[String]
+      var nextBatchLLEsAccum:String = ""
+      var nextBatch: String = ""
 
-      var nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
-
-      val distanceThreshold = 10000
 
       def hasNext = inputSource.hasNext
 
       def next() = {
-
-        var currentBatch = nextBatch
-        var vesselDistanceMap = nextCoordDistanceMap
-
-        println(vesselDistanceMap)
-
-        nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
+        var currentBatch = new ListBuffer[String]()//nextBatch.clone()
+        currentBatch += nextBatch
 
         var timesAccum = scala.collection.mutable.SortedSet[Long]()
-        var coordTimesAccum = scala.collection.mutable.SortedSet[Long]()
-        var llesAccum = nextBatchLLEsAccum
+        var llesAccum = scala.collection.mutable.SortedSet[String]()
+        llesAccum += nextBatchLLEsAccum
 
-        nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
-        nextBatch = new ListBuffer[String]
-        nextBatchLLEsAccum = scala.collection.mutable.SortedSet[String]()
 
         val INF_TS = 2000000000
 
@@ -153,74 +125,18 @@ object IntervalHandler {
 
           val time = split(1)
           val lle = split(0)
-          val mmsi = split(3)
 
           if (!timesAccum.contains(time.toLong)) {
             timesAccum += time.toLong
           }
 
-          if (opts.addNoise && !coordTimesAccum.contains(time.toLong) && !Set("entersArea", "leavesArea").contains(lle) &&
-                timesAccum.size <= batchSize)
-          {
-            vesselDistanceMap = vesselDistanceMap ++ nextCoordDistanceMap
-            nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
-
-            coordTimesAccum += time.toLong
-            var currCoordTime = time
-
-            while (coordInput.hasNext && currCoordTime.toLong <= time.toLong) {
-              val coordCurrLine = coordInput.next().split("\\|")
-
-              currCoordTime = coordCurrLine(1).toString
-              val currCoordVessel = coordCurrLine(3).toString
-
-              val currCoordLong = coordCurrLine(4).toDouble
-              val currCoordLat = coordCurrLine(5).toDouble
-
-              val nearestPoints = DistanceOp.nearestPoints(map_polygons, geom_factory.createPoint(new Coordinate(currCoordLong, currCoordLat)))
-
-              val currDistance = Havershine.haversine(nearestPoints(0).y, nearestPoints(0).x, nearestPoints(1).y, nearestPoints(1).x) * 1000 // in meters
-
-              /*
-                if (currCoordTime.toLong <= time.toLong || (timesAccum.size < batchSize)) {
-                  vesselDistanceMap += ((currCoordVessel, currCoordTime) -> currDistance)
-                } else {
-                  nextCoordDistanceMap += ((currCoordVessel, currCoordTime) -> currDistance)
-                }
-                 */
-
-              if (currCoordTime.toLong <= time.toLong) {
-                vesselDistanceMap += ((currCoordVessel, currCoordTime) -> currDistance)
-              } else {
-                nextCoordDistanceMap += ((currCoordVessel, currCoordTime) -> currDistance)
-              }
-            }
-          }
-
           if (timesAccum.size > batchSize) {
-            nextBatchLLEsAccum += lle
-            nextBatch += generateLLEInstances(newLine, mode)
+            nextBatchLLEsAccum = lle
+            nextBatch = generateLLEInstances(newLine, mode)
           } else {
             if (!llesAccum.contains(lle)) llesAccum += lle
 
-            val currKey = (mmsi.toString, time.toString)
-
-            val vesselDistanceMapKeys = vesselDistanceMap.keySet
-
-            if (opts.addNoise && vesselDistanceMapKeys.contains(currKey)) {
-              val currDistance = vesselDistanceMap(currKey) // in meters
-
-              val deleteProb = 1.1 //1 - (distanceThreshold / currDistance)
-
-              if (Random.nextDouble <= deleteProb) {
-                currentBatch = currentBatch
-              } else {
-                currentBatch += generateLLEInstances(newLine, mode)
-              }
-            } else {
-              currentBatch += generateLLEInstances(newLine, mode)
-            }
-
+            currentBatch += generateLLEInstances(newLine, mode)
           }
         }
 
@@ -229,7 +145,10 @@ object IntervalHandler {
         //currentBatch += generateLLEInstances(newLine, mode)
         batchCount += 1
 
+        val t1 = System.nanoTime()
         val intervals = if (inputSource.hasNext) intervalTree.range(prev_batch_timestamp, timesAccum.last) else intervalTree.range(prev_batch_timestamp, INF_TS)
+        val dur = (System.nanoTime() - t1) / 1e9d
+
 
         if (!inputSource.hasNext) timesAccum += INF_TS
 
@@ -254,8 +173,7 @@ object IntervalHandler {
 
         //what is the use of this line?
         val nexts = timesAccum.sliding(2).map(x => if (mode == "asp") s"next(${x.last},${x.head})" else s"next(${x.last},${x.head})")
-
-        /*
+/*
         var nextsHashMap = new mutable.HashMap[Long, Long]()
         var slideIterator = timesAccum.sliding(2)
 
@@ -266,7 +184,7 @@ object IntervalHandler {
 
           nextsHashMap += (currKey -> currVal)
         }
-        */
+*/
 
         prev_batch_timestamp = timesAccum.last
 
@@ -277,27 +195,7 @@ object IntervalHandler {
 
           containedIn.flatMap(x =>
             {
-              if (opts.addNoise && opts.allLLEs.contains(x._3.hle)) {
-                val currKey = (x._3.vessels(0), timeStamp.toString)
-
-                val vesselDistanceMapKeys = vesselDistanceMap.keySet
-
-                if (vesselDistanceMapKeys.contains(currKey)) {
-                  val currDistance = vesselDistanceMap(currKey) // in meters
-
-                  val deleteProb = 1.1 //1 - (distanceThreshold / currDistance)
-
-                  if (Random.nextDouble <= deleteProb) {
-                    List()
-                  } else {
-                    HLEIntervalToAtom(x._3, timeStamp.toString, "None" /*nextsHashMap(timeStamp).toString*/ , opts.allHLEs)
-                  }
-                } else {
-                  HLEIntervalToAtom(x._3, timeStamp.toString, "None" /*nextsHashMap(timeStamp).toString*/ , opts.allHLEs)
-                }
-              } else {
-                HLEIntervalToAtom(x._3, timeStamp.toString, "None" /*nextsHashMap(timeStamp).toString*/ , opts.allHLEs) // If I dont add noise I just need this line
-              }
+              HLEIntervalToAtom(x._3, timeStamp.toString, "None" /*nextsHashMap(timeStamp).toString*/ , opts.allHLEs)
             })
         } toList
 
@@ -311,21 +209,28 @@ object IntervalHandler {
 
         val all_events = currentBatch.filter(x => x != "None")
 
+        //var temp = all_events.clone()
         var annotation = ListBuffer[String]()
         var narrative = ListBuffer[String]()
 
         val hleIter: Iterator[String] = opts.allHLEs.iterator
         val lleIter: Iterator[String] = opts.allLLEs.iterator
 
+        val t2 = System.nanoTime()
         while (lleIter.hasNext) {
           var currEvent = lleIter.next()
           annotation = annotation ++ all_events.filter(x => x.startsWith("happensAt(" + currEvent + "("))
+          //temp = all_events.clone()
         }
 
         while (hleIter.hasNext) {
           var currEvent = hleIter.next()
           narrative = narrative ++ all_events.filter(x => x.startsWith("holdsAt(" + currEvent + "("))
+          //temp = all_events.clone()
         }
+
+        val dur2 = (System.nanoTime() - t2) / 1e9d
+        print(s"${dur} ${all_events.size} ")
 
         val curr_exmpl = Example(narrative.toList, annotation.toList, json_time.toString)
 
@@ -338,13 +243,7 @@ object IntervalHandler {
     //!x.startsWith("coord") && !x.startsWith("velocity") && !x.startsWith("entersArea") && !x.startsWith("leavesArea")
     ).toIterator
 
-    val coordData = Source.fromFile(pathToLLEs).getLines().filter(x => x.split("\\|")(0) == "coord").toIterator
-
-    val it: Iterator[Example] = new ExampleIterator(data, coordData, opts.runOpts.chunkSize, opts.runOpts.targetHLE, mode = "asp")
-
-    /*while (it.hasNext) {
-        println(it.next)
-      }*/
+    val it: Iterator[Example] = new ExampleIterator(data, opts.runOpts.chunkSize, opts.runOpts.targetHLE, mode = "asp")
 
     it
   }
@@ -422,9 +321,8 @@ object IntervalHandler {
     }
 
     val fluentTerm2 = {
-      if (i.hle == "rendezVous" //|| i.hle == "proximity"
+      if (i.hle == "rendezVous" || i.hle == "proximity"
         || i.hle == "pilotBoarding" || i.hle == "tugging") {
-
         if (i.value != "true") s"${i.hle}(${(i.vessels.reverse :+ i.value).mkString(",")})"
         else s"${i.hle}(${i.vessels.reverse.mkString(",")})"
       } else "None"
