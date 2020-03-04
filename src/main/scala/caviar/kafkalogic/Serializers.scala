@@ -15,15 +15,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package oled
+package orl.kafkalogic
 
 import java.util
 
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import logic.Clause
-import oled.datahandling.Example
+import orl.logic.Clause
+import orl.datahandling.Example
 import org.apache.kafka.common.serialization.{Deserializer, Serializer}
 
 class ExampleSerializer extends Serializer[Example] {

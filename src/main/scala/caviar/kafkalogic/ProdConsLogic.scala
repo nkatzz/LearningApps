@@ -15,14 +15,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package oled.kafkalogic
+package orl.kafkalogic
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
 import java.util.Properties
-
-import oled.datahandling.Example
-import oled.logic.Clause
+import orl.datahandling.Example
+import orl.logic.Clause
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 
 object ProdConsLogic {
@@ -32,7 +31,7 @@ object ProdConsLogic {
     props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
     props.put(ProducerConfig.CLIENT_ID_CONFIG, "Kafka Example Producer")
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
-    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "oled.ExampleSerializer")
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "orl.kafkalogic.ExampleSerializer")
     props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "org.apache.kafka.clients.producer.RoundRobinPartitioner")
 
     val producer = new KafkaProducer[String, Example](props)
@@ -44,7 +43,7 @@ object ProdConsLogic {
     props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
     props.put(ConsumerConfig.CLIENT_ID_CONFIG, "KafkaExampleConsumer_" + id)
     props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer")
-    props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "oled.ExampleDeserializer")
+    props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "orl.kafkalogic.ExampleDeserializer")
     props.put(ConsumerConfig.GROUP_ID_CONFIG, "1")
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
@@ -67,9 +66,10 @@ object ProdConsLogic {
     producer
   }
 
-  def writeExamplesToTopic(data: Iterator[Example], numOfActors: Int) {
+  def writeExamplesToTopic(data: Iterator[Example], numOfActors: Int, examplesPerIteration: Int): Boolean = {
     val producer = createExampleProducer()
-    for (i <- 1 to numOfActors) {
+    var examplesFinished = false
+    for (i <- 1 to numOfActors * examplesPerIteration) {
       if (data.nonEmpty) {
         val exmpl = data.next()
         val record = new ProducerRecord[String, Example]("ExamplesTopic", exmpl)
@@ -78,9 +78,10 @@ object ProdConsLogic {
           "meta(partition=%d, offset=%d)\n",
           record.key(), record.value(), metadata.get().partition(),
           metadata.get().offset());
-      }
+      } else examplesFinished = true
     }
     producer.close()
+    examplesFinished
   }
 
   def writeTheoryToTopic(data: List[Clause], producer: KafkaProducer[String, Array[Byte]]): Unit = {
