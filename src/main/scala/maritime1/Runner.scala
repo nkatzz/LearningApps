@@ -121,7 +121,6 @@ object Runner extends LazyLogging {
         val trainingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
         val testingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
 
-
         val data = trainingDataFunction(fileOpts)
         var batchCount = 0
         while (data.hasNext) {

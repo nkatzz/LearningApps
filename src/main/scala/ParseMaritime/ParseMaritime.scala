@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2016  Nikos Katzouris
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package ParseMaritime
 
 import java.io.File
@@ -19,8 +36,8 @@ import scala.io.Source
 import scala.util.Random
 
 class ParseFileDataOptions(val HLE_Files_Dir: String, val LLE_File: String,
-                      val allHLEs: List[String], val allLLEs: List[String], val runOpts: RunningOptions, val mode: String,
-                      val addNoise: Boolean) extends InputSource
+    val allHLEs: List[String], val allLLEs: List[String], val runOpts: RunningOptions, val mode: String,
+    val addNoise: Boolean) extends InputSource
 
 object ParseMaritime {
   // FOR NOW WILL NOT TAKE ARGUMENTS
@@ -66,16 +83,15 @@ object ParseMaritime {
       *
       */
 
-
     val data = Source.fromFile(pathToLLEs).getLines.filter(x =>
       opts.allLLEs.contains(x.split("\\|")(0))
-      //!x.startsWith("coord") && !x.startsWith("velocity") && !x.startsWith("entersArea") && !x.startsWith("leavesArea")
+    //!x.startsWith("coord") && !x.startsWith("velocity") && !x.startsWith("entersArea") && !x.startsWith("leavesArea")
     ).toIterator
 
     val coordData = Source.fromFile(pathToLLEs).getLines().filter(x => x.split("\\|")(0) == "coord").toIterator
 
     val mongoClient = MongoClient()
-    mongoClient.dropDatabase("maritime")   // TO MAKE THE dbName BE GIVEN AS AN ARGUMENT LATER
+    mongoClient.dropDatabase("maritime") // TO MAKE THE dbName BE GIVEN AS AN ARGUMENT LATER
     val collection = mongoClient("maritime")("examples")
     collection.createIndex(MongoDBObject("time" -> 1))
 
@@ -84,11 +100,11 @@ object ParseMaritime {
 
     // They are used to help me to get what it should to next batch
     var nextBatchLLEsAccum = scala.collection.mutable.SortedSet[String]()
-    var nextBatch = new ListBuffer[(Long,String)]     //keeps (time,atom)
+    var nextBatch = new ListBuffer[(Long, String)] //keeps (time,atom)
 
     var nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
 
-    while(data.hasNext) {
+    while (data.hasNext) {
 
       val distanceThreshold = 10000
 
@@ -100,7 +116,7 @@ object ParseMaritime {
       var llesAccum = nextBatchLLEsAccum
 
       nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
-      nextBatch = new ListBuffer[(Long,String)]
+      nextBatch = new ListBuffer[(Long, String)]
       nextBatchLLEsAccum = scala.collection.mutable.SortedSet[String]()
 
       val INF_TS = 2000000000
@@ -197,14 +213,14 @@ object ParseMaritime {
 
       if (!data.hasNext) timesAccum += INF_TS
 
-      var extras: List[(Long,String)] = intervals.flatMap((interval) => {
+      var extras: List[(Long, String)] = intervals.flatMap((interval) => {
         if (interval._3.stime >= timesAccum.head) {
           if (opts.allLLEs.contains(interval._3.hle)) {
             timesAccum += interval._3.stime
           }
           HLEIntervalToAtom(interval._3, interval._3.stime.toString, "None", opts.allHLEs)
         } else {
-          List((1.toLong,"None"))
+          List((1.toLong, "None"))
         }
       })
 
@@ -215,7 +231,7 @@ object ParseMaritime {
           }
 
           HLEIntervalToAtom(interval._3, interval._3.etime.toString, "None", opts.allHLEs)
-        } else List((1.toLong,"None"))
+        } else List((1.toLong, "None"))
       })
 
       //what is the use of this line?
@@ -237,9 +253,9 @@ object ParseMaritime {
       prev_batch_timestamp = timesAccum.last
 
       extras = extras ++ (timesAccum - timesAccum.last).flatMap { timeStamp =>
-        val containedIn = intervals.filter(interval => (//(opts.allHLEs.contains(interval._3.hle) && interval._3.stime < nextsHashMap(timeStamp)
+        val containedIn = intervals.filter(interval => ( //(opts.allHLEs.contains(interval._3.hle) && interval._3.stime < nextsHashMap(timeStamp)
           //&& nextsHashMap(timeStamp) < interval._3.etime) ||
-          (/*opts.allLLEs.contains(interval._3.hle) &&*/ interval._3.stime < timeStamp && timeStamp < interval._3.etime)))
+          ( /*opts.allLLEs.contains(interval._3.hle) &&*/ interval._3.stime < timeStamp && timeStamp < interval._3.etime)))
 
         containedIn.flatMap(x => {
           if (opts.addNoise && opts.allLLEs.contains(x._3.hle)) {
@@ -274,10 +290,10 @@ object ParseMaritime {
       for (x <- extras) currentBatch += x
       for (x <- nexts) currentBatch += x
 
-      val all_events = currentBatch.filter(x => x != (1,"None"))
+      val all_events = currentBatch.filter(x => x != (1, "None"))
 
-      var annotation = ListBuffer[(Long,String)]()
-      var narrative = ListBuffer[(Long,String)]()
+      var annotation = ListBuffer[(Long, String)]()
+      var narrative = ListBuffer[(Long, String)]()
 
       val hleIter: Iterator[String] = opts.allHLEs.iterator
       val lleIter: Iterator[String] = opts.allLLEs.iterator
@@ -295,32 +311,30 @@ object ParseMaritime {
       var timesEventsSortedMap = mutable.SortedMap[Long, (ListBuffer[String], ListBuffer[String])]() // It will be time->(annotation,narrative)
 
       val currAnnotationIterator = annotation.map(x => x._1).toSet.toIterator
-      while(currAnnotationIterator.hasNext){
+      while (currAnnotationIterator.hasNext) {
         val currTimestamp = currAnnotationIterator.next()
 
-        if(!timesEventsSortedMap.keySet.contains(currTimestamp)){
+        if (!timesEventsSortedMap.keySet.contains(currTimestamp)) {
           timesEventsSortedMap += (currTimestamp -> (annotation.filter(x => x._1 == currTimestamp).map(x => x._2), ListBuffer[String]()))
-        }
-        else{
+        } else {
           timesEventsSortedMap(currTimestamp)._1 ++= annotation.filter(x => x._1 == currTimestamp).map(x => x._2)
         }
       }
 
       val currNarrativeIterator = narrative.map(x => x._1).toSet.toIterator
-      while(currNarrativeIterator.hasNext){
+      while (currNarrativeIterator.hasNext) {
         val currTimestamp = currNarrativeIterator.next()
 
-        if(!timesEventsSortedMap.keySet.contains(currTimestamp)){
+        if (!timesEventsSortedMap.keySet.contains(currTimestamp)) {
           timesEventsSortedMap += (currTimestamp -> (ListBuffer[String](), narrative.filter(x => x._1 == currTimestamp).map(x => x._2)))
-        }
-        else{
+        } else {
           timesEventsSortedMap(currTimestamp)._2 ++= narrative.filter(x => x._1 == currTimestamp).map(x => x._2)
         }
       }
 
-      for(currTimestamp: Long <- timesEventsSortedMap.keySet.toList) {
+      for (currTimestamp: Long <- timesEventsSortedMap.keySet.toList) {
         val currAnnotation = timesEventsSortedMap(currTimestamp)._1
-        val currNarrative  = timesEventsSortedMap(currTimestamp)._2
+        val currNarrative = timesEventsSortedMap(currTimestamp)._2
 
         val entry = MongoDBObject("time" -> currTimestamp.toInt, "annotation" -> currAnnotation, "narrative" -> currNarrative)
         collection.insert(entry)
@@ -385,7 +399,7 @@ object ParseMaritime {
   /* Generate an HLE logical atom. The i var carries all the info, the t var is the particular
    * time point of the generated atom. "target" is the name of the target complex event. The
    * target event is turned into a holdsAt predicate, while all others are turned into happensAt predicates. */
-  def HLEIntervalToAtom(i: HLEInterval, t: String, next_t: String, considered_HLEs: List[String] /*target: String*/ ): List[(Long,String)] = {
+  def HLEIntervalToAtom(i: HLEInterval, t: String, next_t: String, considered_HLEs: List[String] /*target: String*/ ): List[(Long, String)] = {
 
     val functor = if (considered_HLEs.contains(i.hle)) "holdsAt" else "happensAt"
 
@@ -419,17 +433,17 @@ object ParseMaritime {
 
   def generateIntervalTree(pathToHLEs: String, interestedIn: List[String]) = {
 
-    def getListOfFiles(dir: String): List[File] = {
-      val d = new File(dir)
-      if (d.exists && d.isDirectory) {
-        println(d.listFiles.toList)
-        d.listFiles.filter(f => f.isFile).toList
-        // This line does not suits me
-        // d.listFiles.filter(f => f.isFile && interestedIn.exists(eventName => f.getName.contains(eventName))).toList
-      } else {
-        List[File]()
+      def getListOfFiles(dir: String): List[File] = {
+        val d = new File(dir)
+        if (d.exists && d.isDirectory) {
+          println(d.listFiles.toList)
+          d.listFiles.filter(f => f.isFile).toList
+          // This line does not suits me
+          // d.listFiles.filter(f => f.isFile && interestedIn.exists(eventName => f.getName.contains(eventName))).toList
+        } else {
+          List[File]()
+        }
       }
-    }
 
     val files = getListOfFiles(pathToHLEs).map(_.getCanonicalPath)
 

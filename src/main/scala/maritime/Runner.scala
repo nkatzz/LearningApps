@@ -21,20 +21,14 @@ package maritime
   * Created by nkatz at 28/1/20
   */
 
-import java.io.File
-import java.io.PrintWriter
-
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.scalalogging.LazyLogging
 import orl.app.runutils.CMDArgs
-import orl.datahandling.InputHandling.{MongoDataOptions, getMongoData}
 //import maritime.InputHandling.getMongoData
+import maritime.IntervalHandler.readInputFromFile
 import orl.datahandling.Example
 import orl.learning.LocalCoordinator
 import orl.learning.Types.RunSingleCore
-import IntervalHandler.readInputFromFile
-import ParseMaritime.ParseFileDataOptions
-import ParseMaritime.ParseMaritime.writeDataToMongo
 
 object Runner extends LazyLogging {
 
@@ -58,9 +52,9 @@ object Runner extends LazyLogging {
     //"movingSpeed", "underWay", "changingSpeed", , "gap"
 
     val allLLEs = List("gap_end", /*"coord", "velocity",*/
-      "change_in_heading", "entersArea","stop_start", "change_in_speed_start",
-      "gap_start", "change_in_speed_end","stop_end", "leavesArea",
-      "slow_motion_end", "slow_motion_start", "stopped","proximity", "lowSpeed")
+      "change_in_heading", "entersArea", "stop_start", "change_in_speed_start",
+      "gap_start", "change_in_speed_end", "stop_end", "leavesArea",
+      "slow_motion_end", "slow_motion_start", "stopped", "proximity", "lowSpeed")
 
     val allHLEs = List("rendezVous")
 
@@ -116,21 +110,16 @@ object Runner extends LazyLogging {
         */
 
         val fileOpts = new FileDataOptions(HLE_Files_Dir = HLE_Dir_Path, LLE_File = LLEs_File,
-          allHLEs = allHLEs, allLLEs = allLLEs, runOpts = runningOptions, false)
-
+                                           allHLEs       = allHLEs, allLLEs = allLLEs, runOpts = runningOptions, false)
 
         /*val trainingDataOptions = new MongoDataOptions(dbNames       = Vector(runningOptions.train), chunkSize = runningOptions.chunkSize,
           targetConcept = runningOptions.targetHLE, sortDbByField = "time", what = "training")*/
-
 
         //val trainingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
         //val testingDataFunction: MongoDataOptions => Iterator[Example] = getMongoData
 
         val trainingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
         val testingDataFunction: FileDataOptions => Iterator[Example] = readInputFromFile
-
-
-
 
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore

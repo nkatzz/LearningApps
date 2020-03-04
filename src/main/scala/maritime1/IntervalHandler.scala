@@ -96,20 +96,18 @@ object IntervalHandler {
       var batchCount = 0
 
       // They are used to help me to get what it should to next batch
-      var nextBatchLLEsAccum:String = ""
+      var nextBatchLLEsAccum: String = ""
       var nextBatch: String = ""
-
 
       def hasNext = inputSource.hasNext
 
       def next() = {
-        var currentBatch = new ListBuffer[String]()//nextBatch.clone()
+        var currentBatch = new ListBuffer[String]() //nextBatch.clone()
         currentBatch += nextBatch
 
         var timesAccum = scala.collection.mutable.SortedSet[Long]()
         var llesAccum = scala.collection.mutable.SortedSet[String]()
         llesAccum += nextBatchLLEsAccum
-
 
         val INF_TS = 2000000000
 
@@ -149,7 +147,6 @@ object IntervalHandler {
         val intervals = if (inputSource.hasNext) intervalTree.range(prev_batch_timestamp, timesAccum.last) else intervalTree.range(prev_batch_timestamp, INF_TS)
         val dur = (System.nanoTime() - t1) / 1e9d
 
-
         if (!inputSource.hasNext) timesAccum += INF_TS
 
         var extras: List[String] = intervals.flatMap((interval) => {
@@ -173,7 +170,7 @@ object IntervalHandler {
 
         //what is the use of this line?
         val nexts = timesAccum.sliding(2).map(x => if (mode == "asp") s"next(${x.last},${x.head})" else s"next(${x.last},${x.head})")
-/*
+        /*
         var nextsHashMap = new mutable.HashMap[Long, Long]()
         var slideIterator = timesAccum.sliding(2)
 

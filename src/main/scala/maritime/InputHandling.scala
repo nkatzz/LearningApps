@@ -66,7 +66,6 @@ object InputHandling {
   //getData(new DefaultMongoDataOptions(""), getMongoData)
   */
 
-
   /* "what" is either training or testing */
   def getMongoData(opts: MongoDataOptions): Iterator[Example] = {
     val mc = MongoClient()

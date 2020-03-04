@@ -160,8 +160,7 @@ object IntervalHandler {
           }
 
           if (opts.addNoise && !coordTimesAccum.contains(time.toLong) && !Set("entersArea", "leavesArea").contains(lle) &&
-                timesAccum.size <= batchSize)
-          {
+            timesAccum.size <= batchSize) {
             vesselDistanceMap = vesselDistanceMap ++ nextCoordDistanceMap
             nextCoordDistanceMap = new mutable.HashMap[(String, String), Double]()
 
