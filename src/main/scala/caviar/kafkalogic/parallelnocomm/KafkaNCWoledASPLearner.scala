@@ -15,23 +15,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package caviar.kafkalogic
+package caviar.kafkalogic.parallelnocomm
 
 import java.time.Duration
 import java.util.Collections
+
 import akka.actor.PoisonPill
-import scala.collection.JavaConverters._
-import orl.datahandling.InputHandling.InputSource
+import org.apache.kafka.clients.consumer.KafkaConsumer
 import orl.app.runutils.RunningOptions
 import orl.datahandling.Example
-import org.apache.kafka.clients.consumer.KafkaConsumer
+import orl.datahandling.InputHandling.InputSource
 import orl.kafkalogic.ProdConsLogic.createExampleConsumer
 import orl.kafkalogic.Types.{MergedTheory, TheoryResponse, WrapUp}
 import orl.learning.Types.{FinishedBatch, LocalLearnerFinished, StartOver}
-import orl.utils.Utils.{underline}
-import orl.learning.woledasp.{WoledASPLearner}
+import orl.learning.woledasp.WoledASPLearner
+import orl.utils.Utils.underline
 
-class KafkaWoledASPLearner[T <: InputSource](
+import scala.collection.JavaConverters._
+
+class KafkaNCWoledASPLearner[T <: InputSource](
     inps: RunningOptions,
     trainingDataOptions: T,
     testingDataOptions: T,
@@ -59,19 +61,6 @@ class KafkaWoledASPLearner[T <: InputSource](
   exampleConsumer.subscribe(Collections.singletonList("ExamplesTopic"))
 
   val duration: Duration = Duration.ofMillis(5000)
-
- /* @scala.annotation.tailrec
-  final def getRecord: Example = {
-    val records = exampleConsumer.poll(duration)
-    if (!records.isEmpty) {
-      for (record <- records.asScala) {
-        println("Topic: " + record.topic() + ", Key: " + record.key() + ", Value: " + record.value.observations.head +
-          ", Offset: " + record.offset() + ", Partition: " + record.partition())
-      }
-      records.asScala.head.value
-    } else getRecord
-  }*/
-
 
   /* for the time being the local coordinator first writes the Examples to the topic and
    * then starts the learner so the learner consumes examples one by one until it has no more
@@ -102,7 +91,7 @@ class KafkaWoledASPLearner[T <: InputSource](
     case exmpl: Example =>
       if (exmpl.isEmpty) {
         println("worker " + workerId + " sends theory after " + batchCount + " Examples")
-        context.parent ! new TheoryResponse(state.initiationRules ++ state.terminationRules, state.perBatchError)
+        context.parent ! new TheoryResponse(List(), state.perBatchError)
       } else {
         become(processingState)
         self ! exmpl
@@ -118,7 +107,6 @@ class KafkaWoledASPLearner[T <: InputSource](
 
 
     case mergedTheory: MergedTheory =>
-      state.updateRules(mergedTheory.theory, "replace", inps)
       self ! getNextBatch
 
     case _: WrapUp =>
