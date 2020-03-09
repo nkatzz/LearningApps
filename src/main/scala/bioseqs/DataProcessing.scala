@@ -22,8 +22,9 @@ package bioseqs
   */
 
 import java.io.File
-import oled.inference.ASPSolver.solve
-import oled.logic.Literal
+import orl.inference.ASPSolver._
+import orl.logic.Literal
+
 import scala.io.Source
 
 object DataProcessing extends App {
@@ -122,7 +123,7 @@ object DataProcessing extends App {
 
       val write = s"begin(model($counter)).\n$what.\n${repetionsFilteredOut.filter(x => x != "").mkString("\n")}\nend(model($counter)).\n"
 
-      oled.utils.Utils.dumpToFile(write,
+      orl.utils.Utils.dumpToFile(write,
         "/home/nkatz/dev/ACE-ilProlog-1.2.20-linux/ACE-ilProlog-1.2.20/examples/bioseqs/bio.kb", "append")
 
       repetionsFilteredOut.filter(x => x != "") foreach println
