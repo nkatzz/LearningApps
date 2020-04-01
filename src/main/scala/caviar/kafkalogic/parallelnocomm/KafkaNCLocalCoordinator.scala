@@ -59,6 +59,9 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerIte
   // Initiate numOfActors KafkaWoledASPLearners
   private var workers: List[ActorRef] = List()
 
+  val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
+  val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
+
  override def receive : PartialFunction[Any, Unit]= {
 
     case msg: RunSingleCore =>
@@ -73,7 +76,30 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerIte
         writeExamplesToTopic(data, numOfActors, examplesPerIteration)
         for (worker <- workers) worker ! new Run
       }
-    case _: LocalLearnerFinished => context.system.terminate()
+    case _: LocalLearnerFinished => {
+      val averageLoss = avgLoss(errorCount)
+      val accumulatedMistakes = errorCount.scanLeft(0.0)(_ + _).tail
+      for(i <- averageLoss._3) pw.write(i + " ")
+      pw.write("\n")
+      pw.flush()
+      pw.close()
+      for(i <- accumulatedMistakes) pw2.write(i + " ")
+      pw2.write("\n")
+      pw2.flush()
+      pw2.close()
+      import scalatikz.pgf.plots.Figure
+      Figure("AverageLoss")
+        .plot((0 to averageLoss._3.length-1) -> averageLoss._3)
+        .havingXLabel("Batch Number (15 Examples 5 to each learner)")
+        .havingYLabel("Average Loss")
+        .show()
+      Figure("AccumulatedError")
+        .plot((0 to accumulatedMistakes.length-1) -> accumulatedMistakes)
+        .havingXLabel("Batch Number (15 Examples 5 to each learner)")
+        .havingYLabel("Accumulated Mistakes")
+        .show()
+      context.system.terminate()
+    }
   }
 
   /* In this method, the Coordinator will merge the rules from the theories of the Learners in the following way:
@@ -108,24 +134,31 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerIte
    */
 
   private var responseCount = 0
-  var errorCount = 0
   var currBatch = 0
-  val pw = new PrintWriter(new FileWriter(new File("NoCommError"), true))
+  var errorCount: Vector[Int] = Vector[Int]()
+
   def waitResponse: Receive = {
     case theoryRes: TheoryResponse =>
-      responseCount += 1
-      println("Error "+ theoryRes.perBatchError)
-      for(i <- currBatch * 5 to (currBatch * 5) + 4) {
-        errorCount += theoryRes.perBatchError(i)
+      if(responseCount == 0){
+        errorCount = theoryRes.perBatchError
+      } else {
+        errorCount = errorCount.zip(theoryRes.perBatchError).map(t => t._1 + t._2)
       }
+      responseCount += 1
       if (responseCount == numOfActors) {
-        pw.write(" error: " + errorCount + "\n")
-        pw.flush()
         responseCount = 0
         currBatch += 1
         become(mergeTheories)
         self ! new TheoryAccumulated(List[Clause]())
       }
+  }
+
+  def avgLoss(in: Vector[Int]) = {
+    in.foldLeft(0, 0, Vector.empty[Double]) { (x, y) =>
+      val (count, prevSum, avgVector) = (x._1, x._2, x._3)
+      val (newCount, newSum) = (count + 1, prevSum + y)
+      (newCount, newSum, avgVector :+ newSum.toDouble / newCount)
+    }
   }
 
 }

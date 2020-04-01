@@ -21,6 +21,7 @@ import java.io.{File, FileWriter, PrintWriter}
 
 import akka.actor.{ActorRef, Props}
 import caviar.kafkalogic.KafkaWoledASPLearner
+import org.apache.commons.math3.optimization.Weight
 import orl.datahandling.InputHandling.InputSource
 import orl.app.runutils.RunningOptions
 import orl.datahandling.Example
@@ -70,11 +71,16 @@ class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerItera
   private var errorCount: Vector[Int] = Vector[Int]()
   private var currBatch = 0
 
+  val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
+  val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
+
  override def receive : PartialFunction[Any, Unit]= {
 
     case msg: RunSingleCore =>
 
       if (inps.weightLean) {
+        val warmUpLearner =  context.actorOf(Props(new KafkaWoledASPLearner(inps, trainingDataOptions,
+          testingDataOptions, trainingDataFunction, testingDataFunction)), name = "warmupLearner")
         workers = {
             List.tabulate(numOfActors)(n => context.actorOf(Props(new KafkaWoledASPLearner(inps, trainingDataOptions,
               testingDataOptions, trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}_${n}"))
@@ -87,11 +93,25 @@ class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerItera
     case _: LocalLearnerFinished => {
       if(terminate) {
         val averageLoss = avgLoss(errorCount)
+        val accumulatedMistakes = errorCount.scanLeft(0.0)(_ + _).tail
+        for(i <- averageLoss._3) pw.write(i + " ")
+        pw.write("\n")
+        pw.flush()
+        pw.close()
+        for(i <- accumulatedMistakes) pw2.write(i + " ")
+        pw2.write("\n")
+        pw2.flush()
+        pw2.close()
         import scalatikz.pgf.plots.Figure
         Figure("AverageLoss")
-          .plot((0 to currBatch) -> averageLoss._3)
+          .plot((0 to averageLoss._3.length-1) -> averageLoss._3)
           .havingXLabel("Batch Number (15 Examples 5 to each learner)")
           .havingYLabel("Average Loss")
+          .show()
+        Figure("AccumulatedError")
+          .plot((0 to accumulatedMistakes.length-1) -> accumulatedMistakes)
+          .havingXLabel("Batch Number (15 Examples 5 to each learner)")
+          .havingYLabel("Accumulated Mistakes")
           .show()
       }
       context.system.terminate()
@@ -129,32 +149,33 @@ class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerItera
    *   (the rule that is already in the mergedTheory and the rule found to be the same) is averaged.
    *   The statistics (fps fns tps tns) are summed up. The same is done for their common refinements.
    */
+
   def mergeTheories: Receive = {
     case theoryAcc: TheoryAccumulated =>
+      var theoryAccumulated = theoryAcc.theory
+      var newMergedTheory: List[Clause] = List()
 
-      // for every rule in the theory accumulated from the workers
-      for (clauseAcc <- theoryAcc.theory) {
-        val firstOccurrence = mergedTheory.indexWhere(clause => clause.thetaSubsumes(clauseAcc) && clauseAcc.thetaSubsumes(clause))
-
-        // if this rule is not in the merged theory add it as it is
-        if (firstOccurrence == -1) {
-          mergedTheory = mergedTheory :+ clauseAcc
-        }
-        else {
-          var lastOccurrence = mergedTheory.lastIndexWhere(clause => clause.thetaSubsumes(clauseAcc) && clauseAcc.thetaSubsumes(clause))
-          val foundSameRule = checkForEqualRule(clauseAcc, firstOccurrence, lastOccurrence)
-          // if an exact same rule is found the weights and statistics should be merged but the rule should not be added to the theory again
-          if(!foundSameRule) {
-            var firstPart = mergedTheory.slice(0, lastOccurrence + 1)
-            firstPart = firstPart :+ clauseAcc
-            mergedTheory = firstPart ::: mergedTheory.slice(lastOccurrence + 1, mergedTheory.length)
-            // one more rule was added next to the same ones
-            lastOccurrence += 1
-          }
-          // merge the statistics
-          mergeStats(clauseAcc, firstOccurrence, lastOccurrence)
+      // first merge the already existing rules and their refinements
+      var i = 0
+      for (clause <- mergedTheory) {
+        i+=1
+        // exact same rules get merged
+        val SameRules = theoryAccumulated.filter(x => x.thetaSubsumes(clause) && clause.thetaSubsumes(x) && areExactSame(x,clause))
+        if(SameRules.nonEmpty) {
+          mergedTheory
+          theoryAccumulated = theoryAccumulated.filter(x => !(x.thetaSubsumes(clause) && clause.thetaSubsumes(x) && areExactSame(x,clause)))
+          val newClause = mergeStats(clause, SameRules)
+          newMergedTheory = newMergedTheory :+ newClause
         }
       }
+      // new rules generated are added to the merged theory
+      for(rule <- theoryAccumulated) {
+        if(!newMergedTheory.exists(x => x.thetaSubsumes(rule) && rule.thetaSubsumes(x) && areExactSame(x,rule))) {
+          newMergedTheory = newMergedTheory :+ rule
+        }
+      }
+      mergedTheory = newMergedTheory
+
       println("******************* MERGED THEORY **********************")
       for(clause <- mergedTheory) {
         println(clause.tostring )
@@ -178,120 +199,102 @@ class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerItera
       }
   }
 
-  def mergeStats(clauseAcc: Clause, firstOccurrence: Int, lastOccurrence: Int): Unit = {
-    // it is the first time the theory is merged so keep the best stats in the same rules
-    var mergedWeight: Double = 0.0
-    var totalTps = 0
-    var totalTns = 0
-    var totalFps = 0
-    var totalFns = 0
-    if (currBatch == 1) {
-      if (mergedTheory(firstOccurrence).tps < clauseAcc.tps) {
-        mergedWeight = clauseAcc.weight
-        totalTps = clauseAcc.tps
-        totalTns = clauseAcc.tns
-        totalFps = clauseAcc.fps
-        totalFns = clauseAcc.fns
-      } else {
-        mergedWeight = mergedTheory(firstOccurrence).weight
-        totalTps = mergedTheory(firstOccurrence).tps
-        totalTns = mergedTheory(firstOccurrence).tns
-        totalFps = mergedTheory(firstOccurrence).fps
-        totalFns = mergedTheory(firstOccurrence).fns
+  def mergeStats(clause: Clause, sameRules: List[Clause]): Clause = {
+
+    var exactSameRules = 1
+    var newWeight = clause.weight
+    var newTps = clause.tps
+    var newTns = clause.tns
+    var newFps = clause.fps
+    var newFns = clause.fns
+    for (sameRule <- sameRules) {
+      // if the rules are exactly the same merge their statistics and weight and add only once to the new Merged theory
+        if(currBatch ==1) {
+          if(clause.weight < sameRule.weight) newWeight = sameRule.weight
+          if(clause.tps < sameRule.tps)
+            {
+              newTps = sameRule.tps
+              newTns = sameRule.tns
+              newFps = sameRule.fps
+              newFns = sameRule.fns
+            }
+        } else {
+          exactSameRules += 1
+          newWeight += sameRule.weight
+          if((sameRule.tps -clause.tps) < 0 )
+            {
+              println("should not happen")
+            }
+          newTps += (sameRule.tps -clause.tps)
+          newTns += (sameRule.tns -clause.tns)
+          newFps += (sameRule.fps -clause.fps)
+          newFns += (sameRule.fns -clause.fns)
+        }
       }
-    }
-    // else find how many new statistics we have and add them
-    else {
-      mergedWeight = (clauseAcc.weight + mergedTheory(firstOccurrence).weight) / 2
-      totalTps = mergedTheory(firstOccurrence).tps + (clauseAcc.tps - mergedTheory(firstOccurrence).tps)
-      totalTns = mergedTheory(firstOccurrence).tns + (clauseAcc.tns - mergedTheory(firstOccurrence).tns)
-      totalFps = mergedTheory(firstOccurrence).fps + (clauseAcc.fps - mergedTheory(firstOccurrence).fps)
-      totalFns = mergedTheory(firstOccurrence).fns + (clauseAcc.fns - mergedTheory(firstOccurrence).fns)
-    }
-    // set the same stats for all the same rules
-    for (i <- firstOccurrence to lastOccurrence) {
-      mergedTheory(i).weight = mergedWeight
-      mergedTheory(i).tps = totalTps
-      mergedTheory(i).tns = totalTns
-      mergedTheory(i).fps = totalFps
-      mergedTheory(i).fns = totalFns
-    }
-    mergeRefinements(clauseAcc, firstOccurrence, lastOccurrence)
+    clause.weight = newWeight/exactSameRules
+    clause.tps = newTps
+    clause.tns = newTns
+    clause.fps = newFps
+    clause.fns = newFns
+    // mergeRefinements(clause, sameRules)
+    clause
   }
 
-  def mergeRefinements(clauseAcc: Clause, firstOccurrence: Int, lastOccurrence: Int): Unit = {
-    var mergedWeight: Double = 0.0
-    var totalTps = 0
-    var totalTns = 0
-    var totalFps = 0
-    var totalFns = 0
-    // if it is the first time the theory is merged keep the statistics of the clause with more tps
-    if (currBatch == 1) {
-      for (ref <- clauseAcc.refinements) {
-        val sameRefinement = findSameRefinement(ref, firstOccurrence, lastOccurrence)
-        if( sameRefinement == null || sameRefinement.tps < ref.tps) {
-          mergedWeight = ref.weight
-          totalTps = ref.tps
-          totalTns = ref.tns
-          totalFps = ref.fps
-          totalFns = ref.fns
-        }
-        else if (sameRefinement.tps > ref.tps) {
-          mergedWeight = sameRefinement.weight
-          totalTps = sameRefinement.tps
-          totalTns = sameRefinement.tns
-          totalFps = sameRefinement.fps
-          totalFns = sameRefinement.fns
-        }
-        for(i <- firstOccurrence to lastOccurrence) {
-          for( refM <- mergedTheory(i).refinements) {
-            if( refM.thetaSubsumes(ref) && ref.thetaSubsumes(refM)) {
-              refM.weight = mergedWeight
-              refM.tps = totalTps
-              refM.tns = totalTns
-              refM.fps = totalFps
-              refM.fns = totalFns
-            }
-          }
-        }
-
+  def mergeRefinements(clause: Clause, sameRules: List[Clause]): Unit = {
+    if(clause.refinements.length == 2) {
+      if( clause.refinements(0).thetaSubsumes(clause.refinements(1)) && clause.refinements(1).thetaSubsumes(clause.refinements(0))){
+        println("this should never happen but happens")
       }
-    } else {
-      for (ref <- clauseAcc.refinements) {
-        val sameRefinement = findSameRefinement(ref,firstOccurrence, lastOccurrence)
-        if(sameRefinement != null) {
-          mergedWeight = (ref.weight + sameRefinement.weight) / 2
-          totalTps = sameRefinement.tps + (ref.tps - sameRefinement.tps)
-          totalTns = sameRefinement.tns + (ref.tns - sameRefinement.tns)
-          totalFps = sameRefinement.fps + (ref.fps - sameRefinement.fps)
-          totalFns = sameRefinement.fns + (ref.fns - sameRefinement.fns)
-          for(i <- firstOccurrence to lastOccurrence) {
-            for( refM <- mergedTheory(i).refinements) {
-              if( refM.thetaSubsumes(ref) && ref.thetaSubsumes(refM)) {
-                refM.weight = mergedWeight
-                refM.tps = totalTps
-                refM.tns = totalTns
-                refM.fps = totalFps
-                refM.fns = totalFns
+    }
+    for (ref <- clause.refinements) {
+      var sameRefinements = 1
+      var newWeight = ref.weight
+      var newTps = ref.tps
+      var newTns = ref.tns
+      var newFps = ref.fps
+      var newFns = ref.fns
+      for (rule <- sameRules) {
+        for( ref2 <- rule.refinements) {
+          if(ref2.thetaSubsumes(ref) && ref.thetaSubsumes(ref2)) {
+            if (currBatch == 1) {
+              if (ref2.weight > newWeight) newWeight = ref2.weight
+              if(ref2.tps >newTps) {
+                newTps = ref2.tps
+                newTns = ref2.tns
+                newFps = ref2.fps
+                newFns = ref2.fns
               }
             }
+            else {
+              sameRefinements += 1
+              newWeight += ref2.weight
+              newTps += (ref2.tps - ref.tps)
+              newTns += (ref2.tns - ref.tns)
+              newFps += (ref2.fps - ref.fps)
+              newFns += (ref2.fns - ref.fns)
+            }
           }
         }
       }
+      ref.weight = newWeight/sameRefinements
+      ref.tps = newTps
+      ref.tns = newTns
+      ref.fps = newFps
+      ref.fns = newFns
     }
   }
 
-  def findSameRefinement(ref: Clause, firstOccurrence: Int, lastOccurrence: Int): Clause = {
-    val sameRules = mergedTheory.slice(firstOccurrence, lastOccurrence+1)
-    var returnRef: Clause = null
-    for(rule <- sameRules) {
-      val sameRefinement = rule.refinements.indexWhere(clause => clause.thetaSubsumes(ref) && ref.thetaSubsumes(clause))
-      if (sameRefinement != -1) returnRef = rule.refinements(sameRefinement)
+  // Checks if two rules have the same refinements
+  def areExactSame(clause1: Clause, clause2: Clause): Boolean = {
+    var foundDifferentRefinement = false
+    for( ref1 <- clause1.refinements) {
+      if (!clause2.refinements.exists(ref2 => ref2.thetaSubsumes(ref1) && ref1.thetaSubsumes(ref2))) {
+       foundDifferentRefinement = true
+      }
     }
-    ref
+    if(!foundDifferentRefinement) true
+    else false
   }
-
-
 
   /* Every time a worker finishes processing a batch, he sends its local theory to the coordinator
    * and when the coordinator has collected numOfActors theories, he merges the theories and then
@@ -300,8 +303,7 @@ class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerItera
 
   def waitResponse: Receive = {
     case theoryRes: TheoryResponse =>
-      if (mergedTheory.isEmpty) mergedTheory = theoryRes.theory
-      else localTheories ++= theoryRes.theory
+      localTheories ++= theoryRes.theory
 
       if(responseCount == 0){
         errorCount = theoryRes.perBatchError

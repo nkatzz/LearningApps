@@ -20,10 +20,12 @@ package caviar.kafkalogic.othertests
 import orl.datahandling.InputHandling.InputSource
 import orl.app.runutils.RunningOptions
 import orl.datahandling.Example
-import orl.learning.Types.{FinishedBatch, StartOver}
+import orl.learning.Types.{FinishedBatch, LocalLearnerFinished, StartOver}
 import orl.utils.Utils.underline
 import orl.learning.woledasp.WoledASPLearner
 import java.io.{BufferedWriter, File, FileWriter, PrintWriter}
+
+import akka.actor.PoisonPill
 
 class Learner[T <: InputSource](
     inps: RunningOptions,
@@ -38,9 +40,9 @@ class Learner[T <: InputSource](
     trainingDataFunction,
     testingDataFunction) {
 
-    val pw = new PrintWriter(new FileWriter(new File("SingleLearnerError"), true))
+    val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
+    val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
 
-    private def getNextBatch: Example = if (data.isEmpty) Example() else data.next()
 
     import context.become
 
@@ -48,17 +50,55 @@ class Learner[T <: InputSource](
     override def processingState: Receive = {
         case exmpl: Example =>
             process(exmpl)
-            println(state.perBatchError + " " +batchCount)
-            if(((batchCount +1 ) % 15) ==0) {
-                var error = 0
-                for (i <- state.perBatchError) {
-                    error += i
-                }
-               pw.write("Batch: "+ batchCount+ " error: " + error + "\n")
-                pw.flush()
-            }
             batchCount += 1
             become(controlState)
             self ! new FinishedBatch
     }
+
+    def avgLoss(in: Vector[Int]) = {
+        in.foldLeft(0, 0, Vector.empty[Double]) { (x, y) =>
+            val (count, prevSum, avgVector) = (x._1, x._2, x._3)
+            val (newCount, newSum) = (count + 1, prevSum + y)
+            (newCount, newSum, avgVector :+ newSum.toDouble / newCount)
+        }
+    }
+
+    override def shutDown() = {
+        var error: Vector[Int] = Vector()
+        for(i <- 0 to state.perBatchError.length/3){
+            val tempError = state.perBatchError(i) + state.perBatchError(i+1) + state.perBatchError(i+2)
+            error = error :+ tempError
+        }
+
+        val accumulatedMistakes = state.perBatchError.scanLeft(0.0)(_ + _).tail
+        var mistakes: Vector[Double] = Vector()
+        for(i <- 0 to accumulatedMistakes.length/3){
+            val tempError = accumulatedMistakes(i) + accumulatedMistakes(i+1) + accumulatedMistakes(i+2)
+            mistakes = mistakes :+ tempError
+        }
+
+        val averageLoss = avgLoss(error)
+        for(i <- averageLoss._3) pw.write(i + " ")
+        pw.write("\n")
+        pw.flush()
+        pw.close()
+        for(i <- mistakes) pw2.write(i + " ")
+        pw2.write("\n")
+        pw2.flush()
+        pw2.close()
+        import scalatikz.pgf.plots.Figure
+        Figure("AverageLoss")
+          .plot((0 to averageLoss._3.length-1) -> averageLoss._3)
+          .havingXLabel("Batch Number (15 Examples 5 to each learner)")
+          .havingYLabel("Average Loss")
+          .show()
+        Figure("AccumulatedError")
+          .plot((0 to mistakes.length-1) -> mistakes)
+          .havingXLabel("Batch Number (15 Examples 5 to each learner)")
+          .havingYLabel("Accumulated Mistakes")
+          .show()
+        self ! PoisonPill
+        context.parent ! new LocalLearnerFinished
+    }
+
 }
