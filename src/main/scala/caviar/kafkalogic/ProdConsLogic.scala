@@ -29,7 +29,7 @@ object ProdConsLogic {
   def createExampleProducer(): KafkaProducer[String, Example] = {
     val props = new Properties()
     props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
-    props.put(ProducerConfig.CLIENT_ID_CONFIG, "Kafka Example Producer")
+    props.put(ProducerConfig.CLIENT_ID_CONFIG, "CoordinatorExampleProducer")
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
     props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "orl.kafkalogic.ExampleSerializer")
     props.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "org.apache.kafka.clients.producer.RoundRobinPartitioner")
@@ -44,11 +44,11 @@ object ProdConsLogic {
     props.put(ConsumerConfig.CLIENT_ID_CONFIG, "KafkaExampleConsumer_" + id)
     props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer")
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "orl.kafkalogic.ExampleDeserializer")
-    props.put(ConsumerConfig.GROUP_ID_CONFIG, "1")
+    props.put(ConsumerConfig.GROUP_ID_CONFIG, "WoledLearners")
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-    props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, "600000")
-    props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "1") // We only want to get one example per poll
+    props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, "800000")
+    props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "5") // it takes a long time to process examples
 
     val exampleConsumer = new KafkaConsumer[String, Example](props)
     exampleConsumer
@@ -60,10 +60,19 @@ object ProdConsLogic {
     props.put(ProducerConfig.CLIENT_ID_CONFIG, "KafkaTheoryProducer")
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
     props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
-    props.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, "41943040")
 
     val producer = new KafkaProducer[String, Array[Byte]](props)
     producer
+  }
+
+  def writeExamplesToTopic(data: Iterator[Example]) {
+    val producer = createExampleProducer()
+    data.foreach(exmpl => {
+      val record = new ProducerRecord[String, Example]("ExamplesTopic", exmpl)
+      val metadata = producer.send(record)
+      println("record sent at partition: " + metadata.get().partition() + " with offset: " +metadata.get().offset())
+    })
+    producer.close()
   }
 
   def writeExamplesToTopic(data: Iterator[Example], numOfActors: Int, examplesPerIteration: Int): Boolean = {

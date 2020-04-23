@@ -21,22 +21,37 @@ import java.io.{File, FileWriter, PrintWriter}
 
 import akka.actor.{ActorRef, Props}
 import caviar.kafkalogic.KafkaWoledASPLearner
-import org.apache.commons.math3.optimization.Weight
 import orl.datahandling.InputHandling.InputSource
 import orl.app.runutils.RunningOptions
 import orl.datahandling.Example
 import orl.kafkalogic.ProdConsLogic.{createTheoryProducer, writeExamplesToTopic, writeTheoryToTopic}
-import orl.kafkalogic.Types.{MergedTheory, TheoryAccumulated, TheoryResponse, WrapUp}
-import orl.learning.Types.{LocalLearnerFinished, Run, RunSingleCore}
+import orl.kafkalogic.Types.{Run, CollectDelta, CollectZ, Continue, DeltaCollected, DeltaCollection, Increment, MergedTheory, NewRound, NewSubRound, TheoryAccumulated, TheoryResponse, WarmUpFinished, WarmUpRound, WrapUp, ZCollected, ZCollection}
+import orl.learning.Types.{LocalLearnerFinished, RunSingleCore}
 import orl.logic.Clause
 import orl.learning.LocalCoordinator
+import caviar.kafkalogic.FgmUtils.{getNewEstimate, getSumOfDelta, getWeightVector, updateEstimateWeights}
+
+import math._
 
 
 object Types {
+  class Run(val warmUp: Boolean)
+  class Increment(val value: Int)
+  class NewRound(val newEstimate: List[Clause],val theta: Double)
+  class NewSubRound(val theta: Double)
   class TheoryResponse(var theory: List[Clause], val perBatchError: Vector[Int])
   class TheoryAccumulated(var theory: List[Clause])
   class MergedTheory(var theory: List[Clause])
   class WrapUp
+  class WarmUpRound
+  class WarmUpFinished(val WarmUpTheory: List[Clause])
+  class CollectZ
+  class ZCollection(val value: Double)
+  class ZCollected
+  class CollectDelta
+  class DeltaCollected
+  class DeltaCollection(val deltaVector: Vector[Double],val newRules: List[Clause])
+  class Continue
 }
 
 class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerIteration: Int, inps: RunningOptions, trainingDataOptions: T,
@@ -70,26 +85,47 @@ class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerItera
   private var responseCount = 0
   private var errorCount: Vector[Int] = Vector[Int]()
   private var currBatch = 0
+  var currentEstimate: List[Clause] = List()
+  var counter : Int = 0
+  var y : Double = 0.0
+  var theta: Double = 0.0
 
   val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
   val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
 
+  var zCollection: Vector[Double] = Vector()
+  var deltaCollection: List[Vector[Double]] = List()
+  var newRules: List[Clause] = List()
+  var sitesWithUpdatedParams = 0
+
  override def receive : PartialFunction[Any, Unit]= {
 
     case msg: RunSingleCore =>
+      data = getTrainingData
+      writeExamplesToTopic(data)
+      val warmUpLearner =  context.actorOf(Props(new KafkaWoledASPLearner(30,inps, trainingDataOptions,
+        testingDataOptions, trainingDataFunction, testingDataFunction)), name = "warmUpLearner")
+      warmUpLearner ! new Run(true)
+      warmUpLearner ! new WarmUpRound
 
-      if (inps.weightLean) {
-        val warmUpLearner =  context.actorOf(Props(new KafkaWoledASPLearner(inps, trainingDataOptions,
-          testingDataOptions, trainingDataFunction, testingDataFunction)), name = "warmupLearner")
-        workers = {
-            List.tabulate(numOfActors)(n => context.actorOf(Props(new KafkaWoledASPLearner(inps, trainingDataOptions,
-              testingDataOptions, trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}_${n}"))
-        }
-        become(waitResponse)
-        data = getTrainingData
-        writeExamplesToTopic(data, numOfActors, examplesPerIteration)
-        for (worker <- workers) worker ! new Run
+    case warmUp: WarmUpFinished =>
+      currentEstimate = warmUp.WarmUpTheory
+      y = sqrt(8 * exp(-4))
+      theta = y / (2 * numOfActors)
+
+      workers = {
+        List.tabulate(numOfActors)(n => context.actorOf(Props(new KafkaWoledASPLearner(15,inps, trainingDataOptions,
+          testingDataOptions, trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}_${n}"))
       }
+
+      become(waitIncrement)
+
+      for (worker <- workers)
+      {
+        worker ! new Run(false)
+        worker ! new NewRound(currentEstimate, theta)
+      }
+
     case _: LocalLearnerFinished => {
       if(terminate) {
         val averageLoss = avgLoss(errorCount)
@@ -118,210 +154,57 @@ class KafkaLocalCoordinator[T <: InputSource](numOfActors: Int, examplesPerItera
     }
   }
 
-  // Looks for a Rule in the merged theory that is the same as clauseA a clause from the accumulated theory from the learners
-  def checkForEqualRule(clauseA: Clause, firstOccurrence: Int, lastOccurrence: Int):Boolean = {
-    import scala.util.control.Breaks._
-    var foundSameRule = false
-    breakable {
-      for (i <- firstOccurrence to lastOccurrence) {
-        var foundDifferentRefinement = false
-        breakable {
-          for ( ref <- mergedTheory(i).refinements) {
-            if(!clauseA.refinements.exists(x => x.thetaSubsumes(ref) && ref.thetaSubsumes(x))) {
-              foundDifferentRefinement = true
-              break
-            }
-          }
-          // if no different refinement was found the rules are equal
-          if (!foundDifferentRefinement) {
-            foundSameRule = true
-            break
-          }
-        }
-      }
-    }
-    foundSameRule
+  def waitIncrement: Receive = {
+    case incr: Increment =>
+      counter += incr.value
+      if (counter > numOfActors) {
+        // request and collect
+        become(collectFromSites)
+        workers.foreach(x => x ! new CollectZ)
+      } else sender() ! new Continue
+
   }
 
-  /* In this method, the Coordinator will merge the rules from the theories of the Learners in the following way:
-   *  -rules that are not already in the mergedTheory, are inserted as they are.
-   *  -when a rule is already in the mergedTheory, it is inserted again and the weight of both rules
-   *   (the rule that is already in the mergedTheory and the rule found to be the same) is averaged.
-   *   The statistics (fps fns tps tns) are summed up. The same is done for their common refinements.
-   */
+  def collectFromSites: Receive = {
+    case coll: ZCollection =>
+      zCollection = zCollection :+ coll.value
+      if(zCollection.length == numOfActors) self ! new ZCollected
 
-  def mergeTheories: Receive = {
-    case theoryAcc: TheoryAccumulated =>
-      var theoryAccumulated = theoryAcc.theory
-      var newMergedTheory: List[Clause] = List()
-
-      // first merge the already existing rules and their refinements
-      var i = 0
-      for (clause <- mergedTheory) {
-        i+=1
-        // exact same rules get merged
-        val SameRules = theoryAccumulated.filter(x => x.thetaSubsumes(clause) && clause.thetaSubsumes(x) && areExactSame(x,clause))
-        if(SameRules.nonEmpty) {
-          mergedTheory
-          theoryAccumulated = theoryAccumulated.filter(x => !(x.thetaSubsumes(clause) && clause.thetaSubsumes(x) && areExactSame(x,clause)))
-          val newClause = mergeStats(clause, SameRules)
-          newMergedTheory = newMergedTheory :+ newClause
-        }
-      }
-      // new rules generated are added to the merged theory
-      for(rule <- theoryAccumulated) {
-        if(!newMergedTheory.exists(x => x.thetaSubsumes(rule) && rule.thetaSubsumes(x) && areExactSame(x,rule))) {
-          newMergedTheory = newMergedTheory :+ rule
-        }
-      }
-      mergedTheory = newMergedTheory
-
-      println("******************* MERGED THEORY **********************")
-      for(clause <- mergedTheory) {
-        println(clause.tostring )
-        println ("with stats-> weight: " + clause.weight + " " + clause.tps)
-      }
-
-      /* If the Coordinator sees that the Examples have finished, he sends a MergedTheory message to
-       * the Learners to get their latest theory, write it to the topic and terminate the Learning process
-       */
-      if(!terminate) {
-        become(waitResponse)
-        // if writeExamplesToTopic returns true it means the Examples have finished
-        if(writeExamplesToTopic(data, numOfActors, examplesPerIteration)) terminate = true
-        for (worker <- workers) worker ! new MergedTheory(mergedTheory)
-        //writeTheoryToTopic(mergedTheory, theoryProd)
+    case _:ZCollected =>
+      y = 0
+      zCollection.foreach(x => y += x)
+      zCollection = Vector()
+      if(y <= 0.01* numOfActors* sqrt(8*exp(-4))) {
+        workers.foreach(worker => worker ! new CollectDelta)
       } else {
-        for (worker <- workers) worker ! new WrapUp
-        //writeTheoryToTopic(mergedTheory, theoryProd)
-        become(receive)
-        self ! new LocalLearnerFinished
+        counter = 0
+        theta = y/(2* numOfActors)
+        become(waitIncrement)
+        workers.foreach(x => x ! new NewSubRound(theta))
       }
+
+    case coll: DeltaCollection =>
+      deltaCollection = deltaCollection :+ coll.deltaVector
+      newRules = newRules ::: coll.newRules.filter(rule =>
+        !newRules.exists(nRule => nRule.thetaSubsumes(rule) && rule.thetaSubsumes(nRule) &&
+          !currentEstimate.exists(nRule => nRule.thetaSubsumes(rule) && rule.thetaSubsumes(nRule))))
+      if(deltaCollection.length == numOfActors) self ! new DeltaCollected
+
+    case _: DeltaCollected =>
+      deltaCollection.foreach(deltaVector => if(deltaVector.exists(_ != 0)){
+        sitesWithUpdatedParams += 1
+      })
+      val sumOfDeltas = getSumOfDelta(deltaCollection)
+      val newWeights = getNewEstimate(getWeightVector(currentEstimate),sumOfDeltas,sitesWithUpdatedParams)
+      currentEstimate = updateEstimateWeights(currentEstimate,newWeights)
+      currentEstimate = currentEstimate ::: newRules
+      newRules = List()
+
+
+
+
   }
 
-  def mergeStats(clause: Clause, sameRules: List[Clause]): Clause = {
-
-    var exactSameRules = 1
-    var newWeight = clause.weight
-    var newTps = clause.tps
-    var newTns = clause.tns
-    var newFps = clause.fps
-    var newFns = clause.fns
-    for (sameRule <- sameRules) {
-      // if the rules are exactly the same merge their statistics and weight and add only once to the new Merged theory
-        if(currBatch ==1) {
-          if(clause.weight < sameRule.weight) newWeight = sameRule.weight
-          if(clause.tps < sameRule.tps)
-            {
-              newTps = sameRule.tps
-              newTns = sameRule.tns
-              newFps = sameRule.fps
-              newFns = sameRule.fns
-            }
-        } else {
-          exactSameRules += 1
-          newWeight += sameRule.weight
-          if((sameRule.tps -clause.tps) < 0 )
-            {
-              println("should not happen")
-            }
-          newTps += (sameRule.tps -clause.tps)
-          newTns += (sameRule.tns -clause.tns)
-          newFps += (sameRule.fps -clause.fps)
-          newFns += (sameRule.fns -clause.fns)
-        }
-      }
-    clause.weight = newWeight/exactSameRules
-    clause.tps = newTps
-    clause.tns = newTns
-    clause.fps = newFps
-    clause.fns = newFns
-    // mergeRefinements(clause, sameRules)
-    clause
-  }
-
-  def mergeRefinements(clause: Clause, sameRules: List[Clause]): Unit = {
-    if(clause.refinements.length == 2) {
-      if( clause.refinements(0).thetaSubsumes(clause.refinements(1)) && clause.refinements(1).thetaSubsumes(clause.refinements(0))){
-        println("this should never happen but happens")
-      }
-    }
-    for (ref <- clause.refinements) {
-      var sameRefinements = 1
-      var newWeight = ref.weight
-      var newTps = ref.tps
-      var newTns = ref.tns
-      var newFps = ref.fps
-      var newFns = ref.fns
-      for (rule <- sameRules) {
-        for( ref2 <- rule.refinements) {
-          if(ref2.thetaSubsumes(ref) && ref.thetaSubsumes(ref2)) {
-            if (currBatch == 1) {
-              if (ref2.weight > newWeight) newWeight = ref2.weight
-              if(ref2.tps >newTps) {
-                newTps = ref2.tps
-                newTns = ref2.tns
-                newFps = ref2.fps
-                newFns = ref2.fns
-              }
-            }
-            else {
-              sameRefinements += 1
-              newWeight += ref2.weight
-              newTps += (ref2.tps - ref.tps)
-              newTns += (ref2.tns - ref.tns)
-              newFps += (ref2.fps - ref.fps)
-              newFns += (ref2.fns - ref.fns)
-            }
-          }
-        }
-      }
-      ref.weight = newWeight/sameRefinements
-      ref.tps = newTps
-      ref.tns = newTns
-      ref.fps = newFps
-      ref.fns = newFns
-    }
-  }
-
-  // Checks if two rules have the same refinements
-  def areExactSame(clause1: Clause, clause2: Clause): Boolean = {
-    var foundDifferentRefinement = false
-    for( ref1 <- clause1.refinements) {
-      if (!clause2.refinements.exists(ref2 => ref2.thetaSubsumes(ref1) && ref1.thetaSubsumes(ref2))) {
-       foundDifferentRefinement = true
-      }
-    }
-    if(!foundDifferentRefinement) true
-    else false
-  }
-
-  /* Every time a worker finishes processing a batch, he sends its local theory to the coordinator
-   * and when the coordinator has collected numOfActors theories, he merges the theories and then
-   * sends a new batch of Examples to each worker
-   */
-
-  def waitResponse: Receive = {
-    case theoryRes: TheoryResponse =>
-      localTheories ++= theoryRes.theory
-
-      if(responseCount == 0){
-        errorCount = theoryRes.perBatchError
-      } else {
-        errorCount = errorCount.zip(theoryRes.perBatchError).map(t => t._1 + t._2)
-      }
-      responseCount += 1
-      println("Error "+ theoryRes.perBatchError)
-      println("Coordinator received Theory From Learner with length: " + theoryRes.theory.length)
-      if (responseCount == numOfActors) {
-        responseCount = 0
-        println(avgLoss(errorCount))
-        currBatch += 1
-        become(mergeTheories)
-        self ! new TheoryAccumulated(localTheories)
-        localTheories = List()
-      }
-  }
 
   def avgLoss(in: Vector[Int]) = {
     in.foldLeft(0, 0, Vector.empty[Double]) { (x, y) =>

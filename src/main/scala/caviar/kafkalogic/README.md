@@ -7,13 +7,12 @@
 ## Run the Kafka Server
 
 * cd to: kafka_2.12-2.4.0
-* add this line to config/server.properties: message.max.bytes=41943040
 * open a terminal and run: bin/zookeeper-server-start.sh config/zookeeper.properties
 * in another terminal run: bin/kafka-server-start.sh config/server.properties
 
 ## Create a 3 partition topic
 
-A three partition topic is needed as for now the LocalCoordinator creates 3 Learners. Each learners gets assigned to one partition and starts consuming Examples. 
+A three partition topic is needed as for now the LocalCoordinator creates 3 Learners. Each learner gets assigned to one partition and starts consuming Examples. 
 
 From within the kafka folder (kafka_2.12-2.4.0) run:
 
