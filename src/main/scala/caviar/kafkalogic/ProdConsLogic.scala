@@ -44,11 +44,13 @@ object ProdConsLogic {
     props.put(ConsumerConfig.CLIENT_ID_CONFIG, "KafkaExampleConsumer_" + id)
     props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer")
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "orl.kafkalogic.ExampleDeserializer")
-    props.put(ConsumerConfig.GROUP_ID_CONFIG, "WoledLearners")
+    if(id == "warmUpLearner") props.put(ConsumerConfig.GROUP_ID_CONFIG, "WarmupLearner")
+    else props.put(ConsumerConfig.GROUP_ID_CONFIG, "WoledLearners")
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-    props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, "800000")
+    props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, "1000000")
     props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "5") // it takes a long time to process examples
+    props.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, "25000")
 
     val exampleConsumer = new KafkaConsumer[String, Example](props)
     exampleConsumer
@@ -65,12 +67,34 @@ object ProdConsLogic {
     producer
   }
 
-  def writeExamplesToTopic(data: Iterator[Example]) {
+  def writeExamplesToTopic(data: Iterator[Example], times: Int) {
+    val dataList = data.toList
+    var result = dataList
+    for(i <- 2 to times) {
+      result = result ++ dataList
+    }
     val producer = createExampleProducer()
-    data.foreach(exmpl => {
+    result.foreach(exmpl => {
       val record = new ProducerRecord[String, Example]("ExamplesTopic", exmpl)
       val metadata = producer.send(record)
       println("record sent at partition: " + metadata.get().partition() + " with offset: " +metadata.get().offset())
+    })
+    producer.close()
+  }
+
+  def writeExmplItersToTopic(data: Vector[Iterator[Example]], numOfActors: Int, times: Int): Unit = {
+    val producer = createExampleProducer()
+    var partition = -1
+    data.foreach(video => {
+      val dataList = video.toList
+      for(i <- 1 to times) {
+        partition = (partition + 1) % numOfActors
+        dataList.foreach(exmpl => {
+          val record = new ProducerRecord[String, Example]("ExamplesTopic",partition, "", exmpl)
+          val metadata = producer.send(record)
+          println("record sent at partition: " + metadata.get().partition() + " with offset: " +metadata.get().offset())
+        })
+      }
     })
     producer.close()
   }

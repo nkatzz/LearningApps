@@ -17,6 +17,8 @@ class SingleTestLocalCoordinator[T <: InputSource](inps: RunningOptions, trainin
     testingDataOptions, trainingDataFunction,
     testingDataFunction) {
 
+  val t1 = System.nanoTime
+
   override   def receive = {
 
     case msg: RunSingleCore =>
@@ -46,7 +48,9 @@ class SingleTestLocalCoordinator[T <: InputSource](inps: RunningOptions, trainin
 
       }
 
-    case _: LocalLearnerFinished => context.system.terminate()
+    case _: LocalLearnerFinished =>
+      val duration = (System.nanoTime - t1) / 1e9d
+      context.system.terminate()
   }
 
 }

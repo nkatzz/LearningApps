@@ -15,17 +15,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package caviar.kafkalogic.parallelnocomm
+package caviar.kafkalogic.simplemerge
 
 import java.io.{File, FileWriter, PrintWriter}
 
 import akka.actor.{ActorRef, Props}
 import caviar.kafkalogic.MyInputHandling.getMongoData
+import caviar.kafkalogic.parallelnocomm.Types.{FinishedLearner, TheoryResponse}
+import caviar.kafkalogic.simplemerge.Types.{MergedTheory, StartMerging}
+import org.apache.spark.util.SizeEstimator.estimate
 import orl.app.runutils.RunningOptions
 import orl.datahandling.Example
 import orl.datahandling.InputHandling.{InputSource, MongoDataOptions}
-import orl.kafkalogic.ProdConsLogic.{writeExamplesToTopic, writeExmplItersToTopic}
-import caviar.kafkalogic.parallelnocomm.Types.{FinishedLearner, TheoryResponse}
+import orl.kafkalogic.ProdConsLogic.writeExmplItersToTopic
 import orl.learning.LocalCoordinator
 import orl.learning.Types.{LocalLearnerFinished, Run, RunSingleCore}
 import orl.logic.Clause
@@ -33,10 +35,12 @@ import orl.logic.Clause
 
 object Types {
   class FinishedLearner
+  class MergedTheory(val theory: List[Clause])
   class TheoryResponse(var theory: List[Clause], val perBatchError: Vector[Int], val workerId: Int)
+  class StartMerging
 }
 
-class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAfter: Int, inps: RunningOptions, trainingDataOptions: T,
+class KafkaMergeLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAfter: Int, inps: RunningOptions, trainingDataOptions: T,
     testingDataOptions: T, trainingDataFunction: T => Iterator[Example],
     testingDataFunction: T => Iterator[Example]) extends
   LocalCoordinator(inps, trainingDataOptions,
@@ -53,6 +57,7 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
   private var data: Vector[Iterator[Example]] = Vector()
 
   var terminate = false
+  var currRound = 0
 
   // Initiate numOfActors KafkaWoledASPLearners
   private val workers: List[ActorRef] =
@@ -65,28 +70,35 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
   val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
   val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
   val pw3 = new PrintWriter(new FileWriter(new File("ExecutionTimes"), true))
-
+  val pw4 = new PrintWriter(new FileWriter(new File("CommunicationCost"), true))
 
   val addError: (Vector[Int], Vector[Int]) => Vector[Int] = (error1: Vector[Int], error2: Vector[Int]) => {
     (error1 zip error2). map{case (x,y) => x + y}
   }
 
+  var communicationCost = 0.0
+  var responseCount = 0
+  var mergedTheory: List[Clause] = List()
+  var theoryAccumulated: List[Clause] = List()
+
  override def receive : PartialFunction[Any, Unit]= {
 
     // When the coordinator start, it writes all the examples to the topic in a round robin fashion
     case msg: RunSingleCore =>
-      //data = getTrainingData
-     // writeExamplesToTopic(data, 2)
       data = getMongoData(trainingDataOptions.asInstanceOf[MongoDataOptions])
-      //writeExmplItersToTopic(data, numOfActors, 2)
+      writeExmplItersToTopic(data, numOfActors, 2)
       become(waitResponse)
       workers foreach ( _ ! new Run)
 
     case _: LocalLearnerFinished => {
       val duration = (System.nanoTime - t1) / 1e9d
-      pw3.write(s"No Communication time: $duration\n")
+      pw3.write(s"FGM time: $duration\n")
       pw3.flush()
       pw3.close()
+
+      pw4.write(s"FGM communication cost: $communicationCost\n")
+      pw4.flush()
+      pw4.close()
 
       val mergedErrorCount =  errorCount.reduceLeft( (x,y) => addError(x,y))
       val averageLoss = avgLoss(mergedErrorCount)
@@ -120,9 +132,42 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
    * with the data received.
    */
   def waitResponse: Receive = {
+    case _: StartMerging =>
+      var newMergedTheory: List[Clause] = List()
+      // first merge the already existing rules and their refinements
+      for (clause <- mergedTheory) {
+        // exact same rules get merged
+        val SameRules = theoryAccumulated.filter(x => x.thetaSubsumes(clause) && clause.thetaSubsumes(x) && areExactSame(x,clause))
+        if(SameRules.nonEmpty) {
+          theoryAccumulated = theoryAccumulated.filter(x => !(x.thetaSubsumes(clause) && clause.thetaSubsumes(x) && areExactSame(x,clause)))
+          val newClause = mergeStats(clause, SameRules)
+          newMergedTheory = newMergedTheory :+ newClause
+        }
+      }
+      // new rules generated are added to the merged theory
+      for(rule <- theoryAccumulated) {
+        if(!newMergedTheory.exists(x => x.thetaSubsumes(rule) && rule.thetaSubsumes(x) && areExactSame(x,rule))) {
+          newMergedTheory = newMergedTheory :+ rule
+        }
+      }
+      mergedTheory = newMergedTheory
+      workers.foreach(worker => {
+        val merThe = new MergedTheory(mergedTheory)
+        communicationCost += estimate(merThe)
+        worker ! merThe
+      })
+
     case theoryRes: TheoryResponse =>
+      communicationCost += estimate(theoryRes)
       // All learners sent their accumulated error and theories
+      theoryAccumulated = theoryAccumulated ::: theoryRes.theory
       errorCount(theoryRes.workerId) = theoryRes.perBatchError
+      responseCount += 1
+      if (responseCount == numOfActors - finishedWorkers ) {
+        responseCount = 0
+        currRound += 1
+        self ! new StartMerging
+      }
     case _: FinishedLearner => {
       finishedWorkers += 1
       if(finishedWorkers == numOfActors) {
@@ -138,6 +183,59 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
       val (newCount, newSum) = (count + 1, prevSum + y)
       (newCount, newSum, avgVector :+ newSum.toDouble / newCount)
     }
+  }
+
+  def areExactSame(clause1: Clause, clause2: Clause): Boolean = {
+    var foundDifferentRefinement = false
+    for( ref1 <- clause1.refinements) {
+      if (!clause2.refinements.exists(ref2 => ref2.thetaSubsumes(ref1) && ref1.thetaSubsumes(ref2))) {
+        foundDifferentRefinement = true
+      }
+    }
+    if(!foundDifferentRefinement) true
+    else false
+  }
+
+  def mergeStats(clause: Clause, sameRules: List[Clause]): Clause = {
+
+    var exactSameRules = 1
+    var newWeight = clause.weight
+    var newTps = clause.tps
+    var newTns = clause.tns
+    var newFps = clause.fps
+    var newFns = clause.fns
+    for (sameRule <- sameRules) {
+      // if the rules are exactly the same merge their statistics and weight and add only once to the new Merged theory
+      if(currRound == 1) {
+        if(clause.weight < sameRule.weight) newWeight = sameRule.weight
+        if(clause.tps < sameRule.tps)
+        {
+          newTps = sameRule.tps
+          newTns = sameRule.tns
+          newFps = sameRule.fps
+          newFns = sameRule.fns
+        }
+      } else {
+        if((sameRule.tps -clause.tps) <= 0 )
+        {
+
+        }
+        else {
+          exactSameRules += 1
+          newWeight += sameRule.weight
+          newTps += (sameRule.tps -clause.tps)
+          newTns += (sameRule.tns -clause.tns)
+          newFps += (sameRule.fps -clause.fps)
+          newFns += (sameRule.fns -clause.fns)
+        }
+      }
+    }
+    clause.weight = newWeight/exactSameRules
+    clause.tps = newTps
+    clause.tns = newTns
+    clause.fps = newFps
+    clause.fns = newFns
+    clause
   }
 
 }

@@ -40,6 +40,7 @@ class Learner[T <: InputSource](
     trainingDataFunction,
     testingDataFunction) {
 
+    val t1 = System.nanoTime
     val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
     val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
 
@@ -64,14 +65,20 @@ class Learner[T <: InputSource](
     }
 
     override def shutDown() = {
+        val duration = (System.nanoTime - t1) / 1e9d
+        val pw3 = new PrintWriter(new FileWriter(new File("ExecutionTimes"), true) )
+        pw3.write(s"Single Learner time : $duration\n")
+        pw3.flush()
+        pw3.close()
+
         var error: Vector[Int] = Vector()
         for(i <- 0 to state.perBatchError.length/3){
             val tempError = state.perBatchError(i) + state.perBatchError(i+1) + state.perBatchError(i+2)
             error = error :+ tempError
         }
 
-        val accumulatedMistakes = state.perBatchError.scanLeft(0.0)(_ + _).tail
-        var mistakes: Vector[Double] = Vector()
+        val accumulatedMistakes = state.perBatchError.scanLeft(0)(_ + _).tail
+        var mistakes: Vector[Int] = Vector()
         for(i <- 0 to accumulatedMistakes.length/3){
             val tempError = accumulatedMistakes(i) + accumulatedMistakes(i+1) + accumulatedMistakes(i+2)
             mistakes = mistakes :+ tempError
