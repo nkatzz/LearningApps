@@ -73,8 +73,8 @@ object Runner extends LazyLogging {
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
 
-        val coordinator = system.actorOf(Props(new KafkaLocalCoordinator(3, 40, runningOptions, trainingDataOptions,
-                                                                            testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+        val coordinator = system.actorOf(Props(new KafkaLocalCoordinator(2, 35, runningOptions, trainingDataOptions,
+                                                                                testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 

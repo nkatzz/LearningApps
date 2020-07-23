@@ -13,5 +13,6 @@ lazy val root = project.in(file("."))
   .settings(libraryDependencies += Dependency.ORL)
   .settings(libraryDependencies += Dependency.Kafka)
   .settings(libraryDependencies ++= Dependency.Jackson)
+  .settings(libraryDependencies += Dependency.SparkUtil)
   
 

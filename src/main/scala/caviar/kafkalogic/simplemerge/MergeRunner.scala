@@ -72,8 +72,8 @@ object MergeRunner extends LazyLogging {
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
 
-        val coordinator = system.actorOf(Props(new KafkaMergeLocalCoordinator(3, 25, runningOptions, trainingDataOptions,
-                                                                            testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+        val coordinator = system.actorOf(Props(new KafkaMergeLocalCoordinator(2, 35, runningOptions, trainingDataOptions,
+                                                                                     testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 

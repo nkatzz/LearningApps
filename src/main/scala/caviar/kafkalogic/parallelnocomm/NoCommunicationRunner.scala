@@ -72,8 +72,8 @@ object NoCommunicationRunner extends LazyLogging {
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
 
-        val coordinator = system.actorOf(Props(new KafkaNCLocalCoordinator(3, 300, runningOptions, trainingDataOptions,
-                                                                            testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+        val coordinator = system.actorOf(Props(new KafkaNCLocalCoordinator(2, 300, runningOptions, trainingDataOptions,
+                                                                                   testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 

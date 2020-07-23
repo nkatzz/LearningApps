@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2016  Nikos Katzouris
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package caviar.kafkalogic
 
 import java.text.DecimalFormat
@@ -25,7 +42,7 @@ object FgmUtils {
       cp.seenExmplsNum = rule.seenExmplsNum
 
       cp.supportSet = rule.supportSet.map(r => {
-        val newR = new Clause(r.head,r.body,r.uuid)
+        val newR = new Clause(r.head, r.body, r.uuid)
         newR.parentClause = r.parentClause
         newR.isBottomRule = r.isBottomRule
         newR.isTopRule = r.isTopRule
@@ -72,7 +89,7 @@ object FgmUtils {
 
   def safeZoneFunction(updatedWeights: Vector[Double], estimateWeights: Vector[Double], threshold: Double): Double = {
     val zeroedEstimateWeights = estimateWeights ++ Vector.fill(updatedWeights.length - estimateWeights.length)(0.0)
-    sqrt(threshold) - sqrt((updatedWeights zip zeroedEstimateWeights).map { case (x,y) => pow(x - y, 2) }.sum)
+    sqrt(threshold) - sqrt((updatedWeights zip zeroedEstimateWeights).map { case (x, y) => pow(x - y, 2) }.sum)
   }
 
   def getCurrentWeights(updatedRules: List[Clause], currentEstimate: List[Clause]): Vector[Double] = {
@@ -82,9 +99,9 @@ object FgmUtils {
           res.weight
         }
       case None =>
-      {
-        rule.weight
-      }
+        {
+          rule.weight
+        }
     })
 
     val newRuleWeights = updatedRules.filter(updatedRule => !currentEstimate.exists(rule => rule.## == updatedRule.##)).map(x => x.weight)
@@ -97,13 +114,14 @@ object FgmUtils {
     val existingWeights = currentEstimate.map(rule => {
       val find = updatedRules.find(updatedRule => updatedRule.uuid == rule.uuid)
       find match {
-      case Some(res) => res.weight
-      case None => rule.weight
-    }})
+        case Some(res) => res.weight
+        case None => rule.weight
+      }
+    })
 
     val estimateWeights = getWeightVector(currentEstimate)
 
-    (existingWeights zip estimateWeights).map {case (x,y) => x - y}.toVector.map(x => format(x))
+    (existingWeights zip estimateWeights).map { case (x, y) => x - y }.toVector.map(x => format(x))
   }
 
   def areEqual(clause1: Clause, clause2: Clause): Boolean = {
@@ -118,18 +136,18 @@ object FgmUtils {
 
   def getNewEstimate(deltaCollection: List[Vector[Double]]): Vector[Double] = {
     val nonZeroCount = deltaCollection
-      .map(vector => vector.map(element => {if(element!=0) 1 else 0}))
-      .reduceLeft( (x,y) => (x zip y)
-        .map{case (x, y) => x + y})
+      .map(vector => vector.map(element => { if (element != 0) 1 else 0 }))
+      .reduceLeft((x, y) => (x zip y)
+        .map{ case (x, y) => x + y })
 
-    val addedDeltaVectors = deltaCollection.reduceLeft( (vec1, vec2) => (vec1 zip vec2).map{case (x,y) => x + y})
+    val addedDeltaVectors = deltaCollection.reduceLeft((vec1, vec2) => (vec1 zip vec2).map{ case (x, y) => x + y })
 
-    (addedDeltaVectors zip nonZeroCount).map{case (x: Double, y: Int) => if(y != 0) x / y else x}.map(x => format(x))
+    (addedDeltaVectors zip nonZeroCount).map{ case (x: Double, y: Int) => if (y != 0) x / y else x }.map(x => format(x))
   }
 
   def updateEstimateWeights(currentEstimate: List[Clause], newWeights: Vector[Double]): List[Clause] = {
     val newEstimate = (currentEstimate zip newWeights).map{
-      case(rule, w) => {
+      case (rule, w) => {
         rule.weight += w
         rule.weight = format(rule.weight)
         rule

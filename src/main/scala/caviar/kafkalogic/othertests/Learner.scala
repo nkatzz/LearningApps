@@ -40,72 +40,66 @@ class Learner[T <: InputSource](
     trainingDataFunction,
     testingDataFunction) {
 
-    val t1 = System.nanoTime
-    val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
-    val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
+  val t1 = System.nanoTime
+  val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
+  val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
 
+  import context.become
 
-    import context.become
+  override def processingState: Receive = {
+    case exmpl: Example =>
+      process(exmpl)
+      batchCount += 1
+      become(controlState)
+      self ! new FinishedBatch
+  }
 
-
-    override def processingState: Receive = {
-        case exmpl: Example =>
-            process(exmpl)
-            batchCount += 1
-            become(controlState)
-            self ! new FinishedBatch
+  def avgLoss(in: Vector[Int]) = {
+    in.foldLeft(0, 0, Vector.empty[Double]) { (x, y) =>
+      val (count, prevSum, avgVector) = (x._1, x._2, x._3)
+      val (newCount, newSum) = (count + 1, prevSum + y)
+      (newCount, newSum, avgVector :+ newSum.toDouble / newCount)
     }
+  }
 
-    def avgLoss(in: Vector[Int]) = {
-        in.foldLeft(0, 0, Vector.empty[Double]) { (x, y) =>
-            val (count, prevSum, avgVector) = (x._1, x._2, x._3)
-            val (newCount, newSum) = (count + 1, prevSum + y)
-            (newCount, newSum, avgVector :+ newSum.toDouble / newCount)
-        }
-    }
+  override def shutDown() = {
+    val duration = (System.nanoTime - t1) / 1e9d
+    val pw3 = new PrintWriter(new FileWriter(new File("ExecutionTimes"), true))
+    pw3.write(s"Single Learner time : $duration\n")
+    pw3.flush()
+    pw3.close()
 
-    override def shutDown() = {
-        val duration = (System.nanoTime - t1) / 1e9d
-        val pw3 = new PrintWriter(new FileWriter(new File("ExecutionTimes"), true) )
-        pw3.write(s"Single Learner time : $duration\n")
-        pw3.flush()
-        pw3.close()
-
-        var error: Vector[Int] = Vector()
+    /*var error: Vector[Int] = Vector()
         for(i <- 0 to state.perBatchError.length/3){
             val tempError = state.perBatchError(i) + state.perBatchError(i+1) + state.perBatchError(i+2)
             error = error :+ tempError
-        }
+        }*/
+    val error = state.perBatchError
 
-        val accumulatedMistakes = state.perBatchError.scanLeft(0)(_ + _).tail
-        var mistakes: Vector[Int] = Vector()
-        for(i <- 0 to accumulatedMistakes.length/3){
-            val tempError = accumulatedMistakes(i) + accumulatedMistakes(i+1) + accumulatedMistakes(i+2)
-            mistakes = mistakes :+ tempError
-        }
+    val mistakes = state.perBatchError.scanLeft(0)(_ + _).tail
 
-        val averageLoss = avgLoss(error)
-        for(i <- averageLoss._3) pw.write(i + " ")
-        pw.write("\n")
-        pw.flush()
-        pw.close()
-        for(i <- mistakes) pw2.write(i + " ")
-        pw2.write("\n")
-        pw2.flush()
-        pw2.close()
-        import scalatikz.pgf.plots.Figure
-        Figure("AverageLoss")
-          .plot((0 to averageLoss._3.length-1) -> averageLoss._3)
-          .havingXLabel("Batch Number (15 Examples 5 to each learner)")
-          .havingYLabel("Average Loss")
-          .show()
-        Figure("AccumulatedError")
-          .plot((0 to mistakes.length-1) -> mistakes)
-          .havingXLabel("Batch Number (15 Examples 5 to each learner)")
-          .havingYLabel("Accumulated Mistakes")
-          .show()
-        self ! PoisonPill
-        context.parent ! new LocalLearnerFinished
-    }
+    val averageLoss = avgLoss(error)
+    for (i <- averageLoss._3) pw.write(i + " ")
+    pw.write("\n")
+    pw.flush()
+    pw.close()
+    for (i <- mistakes) pw2.write(i + " ")
+    pw2.write("\n")
+    pw2.flush()
+    pw2.close()
+    import scalatikz.pgf.plots.Figure
+    Figure("AverageLoss")
+      .plot((0 to averageLoss._3.length - 1) -> averageLoss._3)
+      .havingXLabel("Batch Number (15 Examples 5 to each learner)")
+      .havingYLabel("Average Loss")
+      .show()
+    Figure("AccumulatedError")
+      .plot((0 to mistakes.length - 1) -> mistakes)
+      .havingXLabel("Batch Number (15 Examples 5 to each learner)")
+      .havingYLabel("Accumulated Mistakes")
+      .show()
+    self ! PoisonPill
+    context.parent ! new LocalLearnerFinished
+  }
 
 }

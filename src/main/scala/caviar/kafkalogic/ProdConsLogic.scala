@@ -19,7 +19,8 @@ package orl.kafkalogic
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
-import java.util.Properties
+import java.util.{Collections, Properties}
+
 import orl.datahandling.Example
 import orl.logic.Clause
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
@@ -44,8 +45,10 @@ object ProdConsLogic {
     props.put(ConsumerConfig.CLIENT_ID_CONFIG, "KafkaExampleConsumer_" + id)
     props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer")
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "orl.kafkalogic.ExampleDeserializer")
-    if(id == "warmUpLearner") props.put(ConsumerConfig.GROUP_ID_CONFIG, "WarmupLearner")
-    else props.put(ConsumerConfig.GROUP_ID_CONFIG, "WoledLearners")
+    if (id == "warmUpLearner") props.put(ConsumerConfig.GROUP_ID_CONFIG, "WarmupLearner")
+    else {
+      props.put(ConsumerConfig.GROUP_ID_CONFIG, "WoledLearners")
+    }
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
     props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, "1000000")
@@ -53,6 +56,16 @@ object ProdConsLogic {
     props.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, "25000")
 
     val exampleConsumer = new KafkaConsumer[String, Example](props)
+    if (id == "warmUpLearner") {
+      exampleConsumer.subscribe(Collections.singletonList("ExamplesTopic"))
+    } else {
+      import org.apache.kafka.common.TopicPartition
+      import java.util
+      val partition = new TopicPartition("ExamplesTopic", id.toInt)
+      val partitions = new util.ArrayList[TopicPartition]
+      partitions.add(partition)
+      exampleConsumer.assign(partitions)
+    }
     exampleConsumer
   }
 
@@ -70,14 +83,14 @@ object ProdConsLogic {
   def writeExamplesToTopic(data: Iterator[Example], times: Int) {
     val dataList = data.toList
     var result = dataList
-    for(i <- 2 to times) {
+    for (i <- 2 to times) {
       result = result ++ dataList
     }
     val producer = createExampleProducer()
     result.foreach(exmpl => {
       val record = new ProducerRecord[String, Example]("ExamplesTopic", exmpl)
       val metadata = producer.send(record)
-      println("record sent at partition: " + metadata.get().partition() + " with offset: " +metadata.get().offset())
+      println("record sent at partition: " + metadata.get().partition() + " with offset: " + metadata.get().offset())
     })
     producer.close()
   }
@@ -86,16 +99,20 @@ object ProdConsLogic {
     val producer = createExampleProducer()
     var partition = -1
     data.foreach(video => {
-      val dataList = video.toList
-      for(i <- 1 to times) {
-        partition = (partition + 1) % numOfActors
-        dataList.foreach(exmpl => {
-          val record = new ProducerRecord[String, Example]("ExamplesTopic",partition, "", exmpl)
-          val metadata = producer.send(record)
-          println("record sent at partition: " + metadata.get().partition() + " with offset: " +metadata.get().offset())
-        })
+      if (!video.isEmpty) {
+        val dataList = video.toList
+        for (i <- 1 to times) {
+          partition = (partition + 1) % numOfActors
+          println(partition)
+          dataList.foreach(exmpl => {
+            val record = new ProducerRecord[String, Example]("ExamplesTopic", partition, "", exmpl)
+            val metadata = producer.send(record)
+            println("record sent at partition: " + metadata.get().partition() + " with offset: " + metadata.get().offset())
+          })
+        }
       }
     })
+    Thread.sleep(500)
     producer.close()
   }
 

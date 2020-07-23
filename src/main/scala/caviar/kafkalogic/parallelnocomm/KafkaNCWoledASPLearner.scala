@@ -51,7 +51,6 @@ class KafkaNCWoledASPLearner[T <: InputSource](
 
   // One consumer is created for each Learner and is responsible for one partition
   val exampleConsumer: KafkaConsumer[String, Example] = createExampleConsumer(workerId)
-  exampleConsumer.subscribe(Collections.singletonList("ExamplesTopic"))
 
   val duration: Duration = Duration.ofMillis(500)
 
@@ -61,14 +60,14 @@ class KafkaNCWoledASPLearner[T <: InputSource](
    * that it has finished processing the examples
    */
   private def getNextBatch: Example = {
-    if(!data.isEmpty) data.next()
+    if (!data.isEmpty) data.next()
     else {
       exampleConsumer.commitAsync()
       val records = exampleConsumer.poll(duration)
-      records.forEach(record => println("Worker: " + workerId+ " read example with head: " + record.value.observations.head +
+      records.forEach(record => println("Worker: " + workerId + " read example with head: " + record.value.observations.head +
         "at Offset: " + record.offset() + ", Partition: " + record.partition()))
 
-      if(records.isEmpty) {
+      if (records.isEmpty) {
         Example()
       } else {
         records.forEach(record => data = data ++ Iterator(record.value()))
@@ -82,12 +81,11 @@ class KafkaNCWoledASPLearner[T <: InputSource](
     self ! getNextBatch
   }
 
-
   override def controlState: Receive = {
     case exmpl: Example =>
       if (exmpl.isEmpty) {
-        val theory = state.getAllRules(inps,"all")
-        context.parent ! new TheoryResponse(theory,state.perBatchError,workerId.toInt)
+        val theory = state.getAllRules(inps, "all")
+        context.parent ! new TheoryResponse(theory, state.perBatchError, workerId.toInt)
         wrapUp()
       } else {
         become(processingState)
@@ -104,13 +102,12 @@ class KafkaNCWoledASPLearner[T <: InputSource](
       // This is why we separate between control and processing state, so that we
       // may do any necessary checks right after a data chunk has been processed.
       // For now, just get the next data chunk.
-      if(batchCount % communicateAfter == 0) {
-        val theory = state.getAllRules(inps,"all")
-        context.parent ! new TheoryResponse(theory,state.perBatchError,workerId.toInt)
+      if (batchCount % communicateAfter == 0) {
+        val theory = state.getAllRules(inps, "all")
+        context.parent ! new TheoryResponse(theory, state.perBatchError, workerId.toInt)
       }
 
       self ! getNextBatch
-
 
     case _: StartOver =>
       logger.info(underline(s"Starting a new training iteration (${this.repeatFor} iterations remaining.)"))

@@ -55,7 +55,7 @@ class KafkaWoledASPLearner[T <: InputSource](
   import context.become
 
   // round is used for the case that a learner sends an increment for round X while the coordinator has started a new round X + 1
-  // In this case, the increment sent should be ignored by the coordinator ( i guess ) and the Learner should start round X + 1
+  // In this case, the increment sent should be ignored by the coordinator and the Learner should start round X + 1
   var currentRound: Int = 0
   var currentSubRound: Int = 0
   var warmUp = false
@@ -63,23 +63,22 @@ class KafkaWoledASPLearner[T <: InputSource](
   var counter: Int = 0
   var zeta: Double = 0.0
   var currentEstimate: List[Clause] = List()
-  val threshold = 5
+  val threshold = 3
   private val workerId = self.path.name.slice(self.path.name.indexOf("_") + 1, self.path.name.length)
 
   val exampleConsumer: KafkaConsumer[String, Example] = createExampleConsumer(workerId)
 
-
   val duration: Duration = Duration.ofMillis(3000)
 
   private def getNextBatch: Example = {
-    if(!data.isEmpty) data.next()
+    if (!data.isEmpty) data.next()
     else {
       exampleConsumer.commitAsync()
       val records = exampleConsumer.poll(duration)
-      records.forEach(record => println("Worker: " + workerId+ " read example with head: " + record.value.observations.head +
+      records.forEach(record => println("Worker: " + workerId + " read example with head: " + record.value.observations.head +
         "at Offset: " + record.offset() + ", Partition: " + record.partition()))
 
-      if(records.isEmpty) {
+      if (records.isEmpty) {
         Example()
       } else {
         records.forEach(record => data = data ++ Iterator(record.value()))
@@ -88,10 +87,10 @@ class KafkaWoledASPLearner[T <: InputSource](
     }
   }
 
- override def receive: PartialFunction[Any, Unit] = {
+  override def receive: PartialFunction[Any, Unit] = {
     case msg: Run =>
       warmUp = msg.warmUp
-      if(!warmUp) {
+      if (!warmUp) {
         val topicPartitions = List(new TopicPartition("ExamplesTopic", workerId.toInt)).asJava
         exampleConsumer.assign(topicPartitions)
       } else exampleConsumer.subscribe(Collections.singletonList("ExamplesTopic"))
@@ -101,7 +100,7 @@ class KafkaWoledASPLearner[T <: InputSource](
 
   override def start(): Unit = {
     this.repeatFor -= 1
-    if(warmUp) self ! getNextBatch
+    if (warmUp) self ! getNextBatch
   }
 
   override def controlState: Receive = {
@@ -109,7 +108,7 @@ class KafkaWoledASPLearner[T <: InputSource](
     case _: CollectZ =>
       val updatedWeights = getCurrentWeights(state.initiationRules ++ state.terminationRules, currentEstimate)
       val estimateWeights = getWeightVector(currentEstimate)
-      zeta = safeZoneFunction(updatedWeights,estimateWeights, threshold)
+      zeta = safeZoneFunction(updatedWeights, estimateWeights, threshold)
       context.parent ! new ZCollection(zeta)
 
     case _: CollectDelta =>
@@ -119,17 +118,17 @@ class KafkaWoledASPLearner[T <: InputSource](
 
     case round: NewRound =>
       currentEstimate = round.newEstimate
-      state.updateRules(copyEstimate(round.newEstimate),"replace",inps)
+      state.updateRules(copyEstimate(round.newEstimate), "replace", inps)
       quantum = round.theta
       counter = 0
       zeta = sqrt(threshold)
-      currentRound +=1
+      currentRound += 1
       currentSubRound = 0
-      if( batchCount == 1) self ! getNextBatch
+      if (batchCount == 1) self ! getNextBatch
 
     case round: NewSubRound =>
       val updatedWeights = getCurrentWeights(state.initiationRules ++ state.terminationRules, currentEstimate)
-      zeta = safeZoneFunction(updatedWeights,getWeightVector(currentEstimate), threshold)
+      zeta = safeZoneFunction(updatedWeights, getWeightVector(currentEstimate), threshold)
 
       quantum = round.theta
       counter = 0
@@ -149,15 +148,15 @@ class KafkaWoledASPLearner[T <: InputSource](
       // This is why we separate between control and processing state, so that we
       // may do any necessary checks right after a data chunk has been processed.
       // For now, just get the next data chunk.
-      if(batchCount % communicateAfter == 0) {
-        if(warmUp) {
+      if (batchCount % communicateAfter == 0) {
+        if (warmUp) {
           context.parent ! new WarmUpFinished(state.initiationRules ++ state.terminationRules, state.perBatchError)
           shutDown()
         } else {
-          val updatedWeights =  getCurrentWeights(state.initiationRules ++ state.terminationRules, currentEstimate)
+          val updatedWeights = getCurrentWeights(state.initiationRules ++ state.terminationRules, currentEstimate)
           val estimateWeights = getWeightVector(currentEstimate)
-          val increment = ((zeta - safeZoneFunction(updatedWeights,estimateWeights, threshold))/quantum).toInt
-          if(increment > counter) {
+          val increment = ((zeta - safeZoneFunction(updatedWeights, estimateWeights, threshold)) / quantum).toInt
+          if (increment > counter) {
             val incrementMessage = new Increment(increment - counter, currentRound, currentSubRound)
             counter = increment
             context.parent ! incrementMessage
@@ -165,7 +164,6 @@ class KafkaWoledASPLearner[T <: InputSource](
         }
       }
       self ! getNextBatch
-
 
     case _: StartOver =>
       logger.info(underline(s"Starting a new training iteration (${this.repeatFor} iterations remaining.)"))
@@ -184,7 +182,7 @@ class KafkaWoledASPLearner[T <: InputSource](
 
   override def shutDown(): Unit = {
     exampleConsumer.close()
-    if(!warmUp)context.parent ! new FinishedLearner(state.perBatchError, workerId.toInt)
+    if (!warmUp) context.parent ! new FinishedLearner(state.perBatchError, workerId.toInt)
     self ! PoisonPill
 
   }

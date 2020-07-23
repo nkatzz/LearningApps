@@ -30,7 +30,6 @@ import orl.learning.LocalCoordinator
 import orl.learning.Types.{LocalLearnerFinished, Run, RunSingleCore}
 import orl.logic.Clause
 
-
 object Types {
   class FinishedLearner
   class TheoryResponse(var theory: List[Clause], val perBatchError: Vector[Int], val workerId: Int)
@@ -38,10 +37,9 @@ object Types {
 
 class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAfter: Int, inps: RunningOptions, trainingDataOptions: T,
     testingDataOptions: T, trainingDataFunction: T => Iterator[Example],
-    testingDataFunction: T => Iterator[Example]) extends
-  LocalCoordinator(inps, trainingDataOptions,
-  testingDataOptions, trainingDataFunction,
-  testingDataFunction) {
+    testingDataFunction: T => Iterator[Example]) extends LocalCoordinator(inps, trainingDataOptions,
+                                                                          testingDataOptions, trainingDataFunction,
+                                                                          testingDataFunction) {
 
   import context.become
 
@@ -57,30 +55,29 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
   // Initiate numOfActors KafkaWoledASPLearners
   private val workers: List[ActorRef] =
     List.tabulate(numOfActors)(n => context.actorOf(Props(new KafkaNCWoledASPLearner(communicateAfter, inps, trainingDataOptions,
-    testingDataOptions, trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}_${n}"))
+                                                                                     testingDataOptions, trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}_${n}"))
 
   private var finishedWorkers = 0
-  var errorCount =new Array[Vector[Int]](numOfActors)
+  var errorCount = new Array[Vector[Int]](numOfActors)
 
   val pw = new PrintWriter(new FileWriter(new File("AvgError"), true))
   val pw2 = new PrintWriter(new FileWriter(new File("AccMistakes"), true))
   val pw3 = new PrintWriter(new FileWriter(new File("ExecutionTimes"), true))
 
-
   val addError: (Vector[Int], Vector[Int]) => Vector[Int] = (error1: Vector[Int], error2: Vector[Int]) => {
-    (error1 zip error2). map{case (x,y) => x + y}
+    (error1 zip error2).map{ case (x, y) => x + y }
   }
 
- override def receive : PartialFunction[Any, Unit]= {
+  override def receive: PartialFunction[Any, Unit] = {
 
     // When the coordinator start, it writes all the examples to the topic in a round robin fashion
     case msg: RunSingleCore =>
       //data = getTrainingData
-     // writeExamplesToTopic(data, 2)
+      // writeExamplesToTopic(data, 2)
       data = getMongoData(trainingDataOptions.asInstanceOf[MongoDataOptions])
-      //writeExmplItersToTopic(data, numOfActors, 2)
+      writeExmplItersToTopic(data, numOfActors, 2)
       become(waitResponse)
-      workers foreach ( _ ! new Run)
+      workers foreach (_ ! new Run)
 
     case _: LocalLearnerFinished => {
       val duration = (System.nanoTime - t1) / 1e9d
@@ -88,25 +85,25 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
       pw3.flush()
       pw3.close()
 
-      val mergedErrorCount =  errorCount.reduceLeft( (x,y) => addError(x,y))
+      val mergedErrorCount = errorCount.reduceLeft((x, y) => addError(x, y))
       val averageLoss = avgLoss(mergedErrorCount)
       val accumulatedMistakes = mergedErrorCount.scanLeft(0.0)(_ + _).tail
-      for(i <- averageLoss._3) pw.write(i + " ")
+      for (i <- averageLoss._3) pw.write(i + " ")
       pw.write("\n")
       pw.flush()
       pw.close()
-      for(i <- accumulatedMistakes) pw2.write(i + " ")
+      for (i <- accumulatedMistakes) pw2.write(i + " ")
       pw2.write("\n")
       pw2.flush()
       pw2.close()
       import scalatikz.pgf.plots.Figure
       Figure("AverageLoss")
-        .plot((0 to averageLoss._3.length-1) -> averageLoss._3)
+        .plot((0 to averageLoss._3.length - 1) -> averageLoss._3)
         .havingXLabel("Batch Number")
         .havingYLabel("Average Loss")
         .show()
       Figure("AccumulatedError")
-        .plot((0 to accumulatedMistakes.length-1) -> accumulatedMistakes)
+        .plot((0 to accumulatedMistakes.length - 1) -> accumulatedMistakes)
         .havingXLabel("Batch Number")
         .havingYLabel("Accumulated Mistakes")
         .show()
@@ -125,7 +122,7 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
       errorCount(theoryRes.workerId) = theoryRes.perBatchError
     case _: FinishedLearner => {
       finishedWorkers += 1
-      if(finishedWorkers == numOfActors) {
+      if (finishedWorkers == numOfActors) {
         become(receive)
         self ! new LocalLearnerFinished
       }
@@ -135,7 +132,7 @@ class KafkaNCLocalCoordinator[T <: InputSource](numOfActors: Int, communicateAft
   def avgLoss(in: Vector[Int]) = {
     in.foldLeft(0, 0, Vector.empty[Double]) { (x, y) =>
       val (count, prevSum, avgVector) = (x._1, x._2, x._3)
-      val (newCount, newSum) = (count + 1, prevSum + y)
+      val (newCount, newSum) = (count + numOfActors, prevSum + y)
       (newCount, newSum, avgVector :+ newSum.toDouble / newCount)
     }
   }

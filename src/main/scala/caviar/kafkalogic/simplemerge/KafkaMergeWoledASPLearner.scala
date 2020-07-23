@@ -18,11 +18,9 @@
 package caviar.kafkalogic.simplemerge
 
 import java.time.Duration
-import java.util.Collections
 
 import akka.actor.PoisonPill
-import caviar.kafkalogic.parallelnocomm.Types.{FinishedLearner, TheoryResponse}
-import caviar.kafkalogic.simplemerge.Types.MergedTheory
+import caviar.kafkalogic.simplemerge.Types.{MergedTheory, TheoryResponse}
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import orl.app.runutils.RunningOptions
 import orl.datahandling.Example
@@ -49,16 +47,14 @@ class KafkaNCWoledASPLearner[T <: InputSource](
     trainingDataFunction,
     testingDataFunction) {
 
-
   import context.become
 
   private val workerId = self.path.name.slice(self.path.name.indexOf("_") + 1, self.path.name.length)
 
   // One consumer is created for each Learner and is responsible for one partition
   val exampleConsumer: KafkaConsumer[String, Example] = createExampleConsumer(workerId)
-  exampleConsumer.subscribe(Collections.singletonList("ExamplesTopic"))
 
-  val duration: Duration = Duration.ofMillis(3000)
+  val duration: Duration = Duration.ofMillis(10000)
 
   /*
    * Examples are kept in val data. If data is empty the Learner tries to get records from the topic.
@@ -66,16 +62,18 @@ class KafkaNCWoledASPLearner[T <: InputSource](
    * that it has finished processing the examples
    */
   private def getNextBatch: Example = {
-    if(!data.isEmpty) data.next()
+    if (!data.isEmpty) data.next()
     else {
       exampleConsumer.commitAsync()
       val records = exampleConsumer.poll(duration)
-      records.forEach(record => println("Worker: " + workerId+ " read example with head: " + record.value.observations.head +
+      records.forEach(record => println("Worker: " + workerId + " read example with head: " + record.value.observations.head +
         "at Offset: " + record.offset() + ", Partition: " + record.partition()))
-
-      if(records.isEmpty) {
+      println("EKANA POLLAK")
+      if (records.isEmpty) {
+        println("AUTO EGINE")
         Example()
       } else {
+        println("AUTO SIGOYRA IXUI")
         records.forEach(record => data = data ++ Iterator(record.value()))
         data.next()
       }
@@ -87,16 +85,15 @@ class KafkaNCWoledASPLearner[T <: InputSource](
     self ! getNextBatch
   }
 
-
   override def controlState: Receive = {
     case mergedTheory: MergedTheory =>
-      state.updateRules(copyEstimate(mergedTheory.theory),"replace",inps)
+      state.updateRules(copyEstimate(mergedTheory.theory), "replace", inps)
       self ! getNextBatch
 
     case exmpl: Example =>
       if (exmpl.isEmpty) {
-        val theory = state.getAllRules(inps,"all")
-        context.parent ! new TheoryResponse(theory,state.perBatchError,workerId.toInt)
+        val theory = state.getAllRules(inps, "all")
+        context.parent ! new TheoryResponse(theory, state.perBatchError, workerId.toInt, false)
         wrapUp()
       } else {
         become(processingState)
@@ -113,11 +110,11 @@ class KafkaNCWoledASPLearner[T <: InputSource](
       // This is why we separate between control and processing state, so that we
       // may do any necessary checks right after a data chunk has been processed.
       // For now, just get the next data chunk.
-      if(batchCount % communicateAfter == 0) {
-        val theory = state.getAllRules(inps,"all")
-        context.parent ! new TheoryResponse(theory,state.perBatchError,workerId.toInt)
+      if (batchCount % communicateAfter == 0) {
+        println("skatoyles ")
+        val theory = state.getAllRules(inps, "all")
+        context.parent ! new TheoryResponse(theory, state.perBatchError, workerId.toInt, false)
       } else self ! getNextBatch
-
 
     case _: StartOver =>
       logger.info(underline(s"Starting a new training iteration (${this.repeatFor} iterations remaining.)"))
@@ -135,8 +132,9 @@ class KafkaNCWoledASPLearner[T <: InputSource](
   }
 
   override def shutDown(): Unit = {
+    println("H MAMA MOY DEN ME AFHNEI NA KLEISW")
     exampleConsumer.close()
-    context.parent ! new FinishedLearner
+    context.parent ! new TheoryResponse(List(), state.perBatchError, workerId.toInt, true)
     self ! PoisonPill
   }
 
@@ -159,7 +157,7 @@ class KafkaNCWoledASPLearner[T <: InputSource](
       cp.seenExmplsNum = rule.seenExmplsNum
 
       cp.supportSet = rule.supportSet.map(r => {
-        val newR = new Clause(r.head,r.body,r.uuid)
+        val newR = new Clause(r.head, r.body, r.uuid)
         newR.parentClause = r.parentClause
         newR.isBottomRule = r.isBottomRule
         newR.isTopRule = r.isTopRule
@@ -201,5 +199,4 @@ class KafkaNCWoledASPLearner[T <: InputSource](
   }
 
 }
-
 

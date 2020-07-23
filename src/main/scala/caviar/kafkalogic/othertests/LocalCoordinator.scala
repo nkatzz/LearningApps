@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) 2016  Nikos Katzouris
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package caviar.kafkalogic.othertests
 
 import akka.actor.Props
@@ -11,15 +28,14 @@ import orl.learning.woledmln.WoledMLNLearner
 import orl.learning.LocalCoordinator
 
 class SingleTestLocalCoordinator[T <: InputSource](inps: RunningOptions, trainingDataOptions: T,
-                                          testingDataOptions: T, trainingDataFunction: T => Iterator[Example],
-                                          testingDataFunction: T => Iterator[Example]) extends
-  LocalCoordinator(inps, trainingDataOptions,
-    testingDataOptions, trainingDataFunction,
-    testingDataFunction) {
+    testingDataOptions: T, trainingDataFunction: T => Iterator[Example],
+    testingDataFunction: T => Iterator[Example]) extends LocalCoordinator(inps, trainingDataOptions,
+                                                                          testingDataOptions, trainingDataFunction,
+                                                                          testingDataFunction) {
 
   val t1 = System.nanoTime
 
-  override   def receive = {
+  override def receive = {
 
     case msg: RunSingleCore =>
 
@@ -29,11 +45,11 @@ class SingleTestLocalCoordinator[T <: InputSource](inps: RunningOptions, trainin
           if (mode == "MLN") {
             context.actorOf(Props(
               new WoledMLNLearner(inps, trainingDataOptions, testingDataOptions,
-                trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}")
+                                  trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}")
           } else {
             context.actorOf(Props(
               new Learner(inps, trainingDataOptions, testingDataOptions,
-                trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}")
+                          trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}")
           }
         }
         worker ! new Run
@@ -42,7 +58,7 @@ class SingleTestLocalCoordinator[T <: InputSource](inps: RunningOptions, trainin
 
         val worker = context.actorOf(Props(
           new OLEDLearner(inps, trainingDataOptions, testingDataOptions,
-            trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}")
+                          trainingDataFunction, testingDataFunction)), name = s"worker-${this.##}")
 
         worker ! new Run
 

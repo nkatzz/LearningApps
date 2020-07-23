@@ -1,0 +1,34 @@
+%initiatedAt(moving(X0,X1),X2) :- happensAt(walking(X0),X2),happensAt(walking(X1),X2),close(X0,X1,24,X2),orientationMove(X0,X1,X2),visible(X0,X2),visible(X1,X2)
+%terminatedAt(moving(X0,X1),X2) :- happensAt(active(X0),X2),happensAt(active(X1),X2)
+%terminatedAt(moving(X0,X1),X2) :- happensAt(inactive(X0),X2),happensAt(inactive(X1),X2)
+%terminatedAt(moving(X0,X1),X2) :- happensAt(inactive(X0),X2),happensAt(active(X1),X2)
+%terminatedAt(moving(X0,X1),X2) :- happensAt(active(X0),X2),happensAt(inactive(X1),X2)
+%terminatedAt(moving(X0,X1),X2) :- not visible(X0,X2)
+%terminatedAt(moving(X0,X1),X2) :- not visible(X1,X2)
+%terminatedAt(moving(X0,X1),X2) :- happensAt(running(X0),X2)
+%terminatedAt(moving(X0,X1),X2) :- happensAt(running(X1),X2)
+
+initiatedAt(moving(X0,X1),X2) :- happensAt(walking(X0),X2),happensAt(walking(X1),X2).
+initiatedAt(moving(X0,X1),X2) :- happensAt(walking(X0),X2),happensAt(walking(X1),X2),close(X0,X1,24,X2),orientationMove(X0,X1,X2).
+initiatedAt(moving(X0,X1),X2) :- happensAt(walking(X0),X2),happensAt(walking(X1),X2),close(X0,X1,25,X2),orientationMove(X0,X1,X2).
+initiatedAt(moving(X0,X1),X2) :- happensAt(walking(X0),X2),happensAt(walking(X1),X2),close(X0,X1,34,X2),orientationMove(X0,X1,X2).
+terminatedAt(moving(X0,X1),X2) :- happensAt(active(X1),X2),happensAt(active(X0),X2).
+terminatedAt(moving(X0,X1),X2) :- happensAt(inactive(X1),X2),happensAt(active(X0),X2).
+terminatedAt(moving(X0,X1),X2) :- happensAt(active(X1),X2),happensAt(inactive(X0),X2).
+terminatedAt(moving(X0,X1),X2) :- orientationFar(X0,X1,X2).
+terminatedAt(moving(X0,X1),X2) :- far(X0,X1,24,X2).
+terminatedAt(moving(X0,X1),X2) :- far(X0,X1,25,X2).
+terminatedAt(moving(X0,X1),X2) :- far(X0,X1,34,X2).
+terminatedAt(moving(X0,X1),X2) :- happensAt(exit(X0),X2).
+terminatedAt(moving(X0,X1),X2) :- happensAt(exit(X1),X2).
+
+%initiatedAt(move(X0,X1),X2) :- happensAt(walking(X0),X2),happensAt(walking(X1),X2),orientationMove(X0,X1,X2),close(X0,X1,34,X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(walking(X0),X2),far(X0,X1,34,X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(walking(X1),X2),far(X0,X1,34,X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(active(X0),X2),happensAt(active(X1),X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(active(X0),X2),happensAt(inactive(X1),X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(active(X1),X2),happensAt(inactive(X0),X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(running(X0),X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(running(X1),X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(exit(X0),X2).
+%terminatedAt(move(X0,X1),X2) :- happensAt(exit(X1),X2).

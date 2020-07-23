@@ -22,8 +22,8 @@ import java.io.File
 import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.MongoClient
 import com.mongodb.casbah.commons.MongoDBObject
-import oled.logic.Literal
-import oled.logic.parsers.ClausalLogicParser
+import orl.logic.Literal
+import orl.logic.parsers.ClausalLogicParser
 
 import scala.collection.immutable.SortedMap
 
@@ -226,7 +226,7 @@ object ParseCAVIAR extends ClausalLogicParser {
       val times = allAtoms.map(_.terms.reverse.head.tostring).distinct.length
       //println(times.length)
       val ids = parsed.flatMap(_.atoms).flatMap(z => idPattern.findAllIn(z).toList).distinct.length
-      val size = if (ids > 1) (times * oled.utils.Utils.combinations(ids, 2)).toInt else times
+      val size = if (ids > 1) (times * orl.utils.Utils.combinations(ids, 2)).toInt else times
       println(s"current video size: $size")
       totalSize = totalSize + size
     }
