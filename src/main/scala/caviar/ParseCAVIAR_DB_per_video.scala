@@ -31,8 +31,8 @@ import scala.collection.immutable.SortedMap
 object ParseCAVIAR_DB_per_video {
 
   def main(args: Array[String]) = {
-    //val dataPath = "/home/nkatz/dev/CAVIAR-abrupt-original"
-    val dataPath = args(0)
+    val dataPath = "/home/vitani/CAVIAR"
+    //val dataPath = args(0)
     //runOld(dataPath)
     runNew(dataPath)
   }

@@ -15,17 +15,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package caviar.kafkalogic
+package caviar.kafkalogic.simplemerge
 
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.scalalogging.LazyLogging
 import orl.app.runutils.CMDArgs
-import orl.datahandling.InputHandling.{MongoDataOptions, getMongoData}
 import orl.datahandling.Example
-import orl.kafkalogic.KafkaLocalCoordinator
+import orl.datahandling.InputHandling.{MongoDataOptions, getMongoData}
 import orl.learning.Types.RunSingleCore
 
-object Runner extends LazyLogging {
+object MergeRunner extends LazyLogging {
 
   def main(args: Array[String]) = {
 
@@ -73,8 +72,8 @@ object Runner extends LazyLogging {
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
 
-        val coordinator = system.actorOf(Props(new KafkaLocalCoordinator(2, 35, runningOptions, trainingDataOptions,
-                                                                                testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+        val coordinator = system.actorOf(Props(new KafkaMergeLocalCoordinator(2, 35, runningOptions, trainingDataOptions,
+                                                                                     testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 

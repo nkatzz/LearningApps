@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package caviar.kafkalogic
+package caviar.kafkalogic.othertests
 
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.scalalogging.LazyLogging
@@ -25,7 +25,7 @@ import orl.datahandling.Example
 import orl.kafkalogic.KafkaLocalCoordinator
 import orl.learning.Types.RunSingleCore
 
-object Runner extends LazyLogging {
+object SingleLearnerRunner extends LazyLogging {
 
   def main(args: Array[String]) = {
 
@@ -73,8 +73,8 @@ object Runner extends LazyLogging {
         val system = ActorSystem("LocalLearningSystem")
         val startMsg = new RunSingleCore
 
-        val coordinator = system.actorOf(Props(new KafkaLocalCoordinator(2, 35, runningOptions, trainingDataOptions,
-                                                                                testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
+        val coordinator = system.actorOf(Props(new SingleTestLocalCoordinator(runningOptions, trainingDataOptions,
+                                                                              testingDataOptions, trainingDataFunction, testingDataFunction)), name = "LocalCoordinator")
 
         coordinator ! startMsg
 

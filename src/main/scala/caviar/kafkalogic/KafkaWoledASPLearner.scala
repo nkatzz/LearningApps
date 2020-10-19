@@ -19,19 +19,27 @@ package caviar.kafkalogic
 
 import java.time.Duration
 import java.util.Collections
+
 import akka.actor.PoisonPill
+
 import scala.collection.JavaConverters._
 import orl.datahandling.InputHandling.InputSource
 import orl.app.runutils.RunningOptions
 import orl.datahandling.Example
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import orl.kafkalogic.ProdConsLogic.createExampleConsumer
-import orl.kafkalogic.Types.{MergedTheory, TheoryResponse, WrapUp}
+import orl.kafkalogic.Types.{CollectDelta, CollectZ, Continue, DeltaCollection, FinishedLearner, Increment, MergedTheory, NewRound, NewSubRound, Run, TheoryResponse, WarmUpFinished, WrapUp, ZCollection}
 import orl.learning.Types.{FinishedBatch, LocalLearnerFinished, StartOver}
-import orl.utils.Utils.{underline}
-import orl.learning.woledasp.{WoledASPLearner}
+import orl.utils.Utils.underline
+import orl.learning.woledasp.WoledASPLearner
+import orl.logic.Clause
+import FgmUtils._
+import org.apache.kafka.common.TopicPartition
+
+import math._
 
 class KafkaWoledASPLearner[T <: InputSource](
+    communicateAfter: Int,
     inps: RunningOptions,
     trainingDataOptions: T,
     testingDataOptions: T,
@@ -46,63 +54,89 @@ class KafkaWoledASPLearner[T <: InputSource](
 
   import context.become
 
+  // round is used for the case that a learner sends an increment for round X while the coordinator has started a new round X + 1
+  // In this case, the increment sent should be ignored by the coordinator and the Learner should start round X + 1
+  var currentRound: Int = 0
+  var currentSubRound: Int = 0
+  var warmUp = false
+  var quantum: Double = 0.0
+  var counter: Int = 0
+  var zeta: Double = 0.0
+  var currentEstimate: List[Clause] = List()
+  val threshold = 3
   private val workerId = self.path.name.slice(self.path.name.indexOf("_") + 1, self.path.name.length)
 
-  //  Creates a Theory producer that writes the expanded theory to the Theory Topic
-  //val theoryProducer: KafkaProducer[String, Array[Byte]] = createTheoryProducer(workerId)
-
-  /* Create an Example Consumer for the getNextBatch method that consumes exactly one
-   * Example from the topic. If the topic is empty it returns an empty Example to simulate
-   * the end of the Iterator
-   */
   val exampleConsumer: KafkaConsumer[String, Example] = createExampleConsumer(workerId)
-  exampleConsumer.subscribe(Collections.singletonList("ExamplesTopic"))
 
-  val duration: Duration = Duration.ofMillis(5000)
+  val duration: Duration = Duration.ofMillis(3000)
 
- /* @scala.annotation.tailrec
-  final def getRecord: Example = {
-    val records = exampleConsumer.poll(duration)
-    if (!records.isEmpty) {
-      for (record <- records.asScala) {
-        println("Topic: " + record.topic() + ", Key: " + record.key() + ", Value: " + record.value.observations.head +
-          ", Offset: " + record.offset() + ", Partition: " + record.partition())
+  private def getNextBatch: Example = {
+    if (!data.isEmpty) data.next()
+    else {
+      exampleConsumer.commitAsync()
+      val records = exampleConsumer.poll(duration)
+      records.forEach(record => println("Worker: " + workerId + " read example with head: " + record.value.observations.head +
+        "at Offset: " + record.offset() + ", Partition: " + record.partition()))
+
+      if (records.isEmpty) {
+        Example()
+      } else {
+        records.forEach(record => data = data ++ Iterator(record.value()))
+        data.next()
       }
-      records.asScala.head.value
-    } else getRecord
-  }*/
-
-
-  /* for the time being the local coordinator first writes the Examples to the topic and
-   * then starts the learner so the learner consumes examples one by one until it has no more
-   * to read.
-   */
-  def getRecord: Example = {
-    val records = exampleConsumer.poll(duration)
-    if(records.isEmpty) new Example()
-    else records.asScala.head.value()
+    }
   }
 
-  //private def getTrainingData = trainingDataFunction(trainingDataOptions)
-  private def getNextBatch: Example = {
-    getRecord
+  override def receive: PartialFunction[Any, Unit] = {
+    case msg: Run =>
+      warmUp = msg.warmUp
+      if (!warmUp) {
+        val topicPartitions = List(new TopicPartition("ExamplesTopic", workerId.toInt)).asJava
+        exampleConsumer.assign(topicPartitions)
+      } else exampleConsumer.subscribe(Collections.singletonList("ExamplesTopic"))
+      become(controlState)
+      start()
   }
 
   override def start(): Unit = {
     this.repeatFor -= 1
-    self ! getNextBatch
+    if (warmUp) self ! getNextBatch
   }
 
-  /* When the Learner fails to read examples, it means that the batch the Coordinator sent
-   * has finished. So the Learner sends its local theory to the Coordinator via a TheoryResponse
-   * message. Then the Learner waits for a MergedTheory message, to get the theory the Coordinator
-   * sent by merging the theories of all the Learners.
-   */
   override def controlState: Receive = {
+
+    case _: CollectZ =>
+      val updatedWeights = getCurrentWeights(state.initiationRules ++ state.terminationRules, currentEstimate)
+      val estimateWeights = getWeightVector(currentEstimate)
+      zeta = safeZoneFunction(updatedWeights, estimateWeights, threshold)
+      context.parent ! new ZCollection(zeta)
+
+    case _: CollectDelta =>
+      val deltaVector = getDeltaVector(state.initiationRules ++ state.terminationRules, currentEstimate)
+      val newRules = (state.initiationRules ++ state.terminationRules).filter(rule => !currentEstimate.exists(estimateRule => rule.## == estimateRule.##))
+      context.parent ! new DeltaCollection(deltaVector, newRules)
+
+    case round: NewRound =>
+      currentEstimate = round.newEstimate
+      state.updateRules(copyEstimate(round.newEstimate), "replace", inps)
+      quantum = round.theta
+      counter = 0
+      zeta = sqrt(threshold)
+      currentRound += 1
+      currentSubRound = 0
+      if (batchCount == 1) self ! getNextBatch
+
+    case round: NewSubRound =>
+      val updatedWeights = getCurrentWeights(state.initiationRules ++ state.terminationRules, currentEstimate)
+      zeta = safeZoneFunction(updatedWeights, getWeightVector(currentEstimate), threshold)
+
+      quantum = round.theta
+      counter = 0
+      currentSubRound += 1
+
     case exmpl: Example =>
       if (exmpl.isEmpty) {
-        println("worker " + workerId + " sends theory after " + batchCount + " Examples")
-        context.parent ! new TheoryResponse(state.initiationRules ++ state.terminationRules)
+        wrapUp()
       } else {
         become(processingState)
         self ! exmpl
@@ -114,16 +148,22 @@ class KafkaWoledASPLearner[T <: InputSource](
       // This is why we separate between control and processing state, so that we
       // may do any necessary checks right after a data chunk has been processed.
       // For now, just get the next data chunk.
+      if (batchCount % communicateAfter == 0) {
+        if (warmUp) {
+          context.parent ! new WarmUpFinished(state.initiationRules ++ state.terminationRules, state.perBatchError)
+          shutDown()
+        } else {
+          val updatedWeights = getCurrentWeights(state.initiationRules ++ state.terminationRules, currentEstimate)
+          val estimateWeights = getWeightVector(currentEstimate)
+          val increment = ((zeta - safeZoneFunction(updatedWeights, estimateWeights, threshold)) / quantum).toInt
+          if (increment > counter) {
+            val incrementMessage = new Increment(increment - counter, currentRound, currentSubRound)
+            counter = increment
+            context.parent ! incrementMessage
+          }
+        }
+      }
       self ! getNextBatch
-
-
-    case mergedTheory: MergedTheory =>
-      state.updateRules(mergedTheory.theory, "replace", inps)
-      self ! getNextBatch
-
-    case _: WrapUp =>
-      wrapUp()
-      context.parent ! new LocalLearnerFinished
 
     case _: StartOver =>
       logger.info(underline(s"Starting a new training iteration (${this.repeatFor} iterations remaining.)"))
@@ -136,15 +176,14 @@ class KafkaWoledASPLearner[T <: InputSource](
     case exmpl: Example =>
       process(exmpl)
       batchCount += 1
-      exampleConsumer.commitAsync()
       become(controlState)
       self ! new FinishedBatch
   }
 
   override def shutDown(): Unit = {
-    //theoryProducer.close()
     exampleConsumer.close()
+    if (!warmUp) context.parent ! new FinishedLearner(state.perBatchError, workerId.toInt)
     self ! PoisonPill
-    context.parent ! new LocalLearnerFinished
+
   }
 }

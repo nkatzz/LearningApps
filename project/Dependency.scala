@@ -36,6 +36,8 @@ object Dependency {
     final val Jackson = "2.10.1"
   }
 
+  lazy val SparkUtil = "org.apache.spark" %% "spark-core" % "2.4.5"
+
   lazy val Kafka = "org.apache.kafka" % "kafka-clients" % v.Kafka
 
   // Object Serializer
